@@ -1632,6 +1632,14 @@ class InputModel {
     }
   }
 
+  /// Files from the local file manager are being dragged over the remote view.
+  /// Keep the remote cursor under the local one, so that the drop happens
+  /// at the place the user sees.
+  void onDragFilesMove(Offset globalPosition) {
+    if (isViewOnly || isViewCamera) return;
+    handleMouse(getMouseEventMove(), globalPosition, moveCanvas: false);
+  }
+
   void onPointerPanZoomStart(PointerPanZoomStartEvent e) {
     _lastScale = 1.0;
     _stopFling = true;

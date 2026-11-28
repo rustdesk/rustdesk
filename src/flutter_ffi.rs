@@ -600,6 +600,64 @@ pub fn session_set_trackpad_speed(session_id: SessionID, value: i32) {
     }
 }
 
+/// Files dropped from the local file manager onto the remote view.
+/// Offers them to the peer through the clipboard file channel and asks the peer
+/// to drop them at its current cursor position (the view moves the remote cursor
+/// to the drop point first). Returns false if drag and drop is not available.
+pub fn session_drop_files(session_id: SessionID, paths: Vec<String>) -> SyncReturn<bool> {
+    #[cfg(feature = "unix-file-copy-paste")]
+    {
+        use crate::client::Interface as _;
+        log::info!("drag and drop files: dropped {} item(s) onto the remote view", paths.len());
+        if paths.is_empty() {
+            return SyncReturn(false);
+        }
+        let Some(s) = sessions::get_session_by_session_id(&session_id) else {
+            log::warn!("drag and drop files: session not found");
+            return SyncReturn(false);
+        };
+        {
+            let version = s.lc.read().unwrap().version;
+            if !crate::is_support_file_copy_paste_num(version) || !s.is_file_clipboard_required() {
+                log::warn!(
+                    "drag and drop files: file copy paste is not available (peer version {}, required {})",
+                    version,
+                    s.is_file_clipboard_required()
+                );
+                return SyncReturn(false);
+            }
+            match clipboard::platform::unix::serv_files::sync_files(&paths) {
+                Ok(()) => {
+                    let mut format_list =
+                        crate::clipboard_file::unix_file_clip::get_format_list();
+                    if let clipboard::ClipboardFile::FormatList { format_list } =
+                        &mut format_list
+                    {
+                        format_list.push((
+                            crate::clipboard_file::DRAG_DROP_FORMAT_ID,
+                            crate::clipboard_file::DRAG_DROP_FORMAT_NAME.to_owned(),
+                        ));
+                    }
+                    log::info!("drag and drop files: offering {:?} to the peer", format_list);
+                    s.send(crate::client::Data::Message(
+                        crate::clipboard_file::clip_2_msg(format_list),
+                    ));
+                    return SyncReturn(true);
+                }
+                Err(e) => {
+                    log::error!("drag and drop files: failed to sync files: {}", e);
+                }
+            }
+        }
+        SyncReturn(false)
+    }
+    #[cfg(not(feature = "unix-file-copy-paste"))]
+    {
+        let _ = (session_id, paths);
+        SyncReturn(false)
+    }
+}
+
 pub fn session_lock_screen(session_id: SessionID) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.lock_screen();

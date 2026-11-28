@@ -35,6 +35,95 @@ class RelativeMouseState {
     private init() {}
 }
 
+/// Drop target for a desktop_multi_window sub-window.
+///
+/// Speaks the same "desktop_drop" method channel protocol as the desktop_drop
+/// plugin (entered / updated / exited / performOperation), so the Dart
+/// `DropTarget` widget works unchanged, but it lives in the sub-window's own view
+/// and talks to the sub-window's own engine.
+class SubWindowDropTarget: NSView {
+    private let channel: FlutterMethodChannel
+
+    static func attach(to controller: FlutterViewController) {
+        let channel = FlutterMethodChannel(name: "desktop_drop", binaryMessenger: controller.engine.binaryMessenger)
+        let view = SubWindowDropTarget(frame: controller.view.bounds, channel: channel)
+        view.autoresizingMask = [.width, .height]
+        view.registerForDraggedTypes(NSFilePromiseReceiver.readableDraggedTypes.map { NSPasteboard.PasteboardType($0) })
+        view.registerForDraggedTypes([NSPasteboard.PasteboardType.fileURL])
+        controller.view.addSubview(view)
+    }
+
+    init(frame frameRect: NSRect, channel: FlutterMethodChannel) {
+        self.channel = channel
+        super.init(frame: frameRect)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        channel.invokeMethod("entered", arguments: convertPoint(sender.draggingLocation))
+        return .copy
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        channel.invokeMethod("updated", arguments: convertPoint(sender.draggingLocation))
+        return .copy
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        channel.invokeMethod("exited", arguments: nil)
+    }
+
+    private lazy var destinationURL: URL = {
+        let url = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("Drops")
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true, attributes: nil)
+        return url
+    }()
+
+    private lazy var workQueue: OperationQueue = {
+        let queue = OperationQueue()
+        queue.qualityOfService = .userInitiated
+        return queue
+    }()
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        var urls = [String]()
+        let lock = NSLock()
+        let searchOptions: [NSPasteboard.ReadingOptionKey: Any] = [.urlReadingFileURLsOnly: true]
+        let group = DispatchGroup()
+        sender.enumerateDraggingItems(options: [], for: nil, classes: [NSFilePromiseReceiver.self, NSURL.self], searchOptions: searchOptions) { item, _, _ in
+            switch item.item {
+            case let receiver as NSFilePromiseReceiver:
+                group.enter()
+                receiver.receivePromisedFiles(atDestination: self.destinationURL, options: [:], operationQueue: self.workQueue) { fileURL, error in
+                    if error == nil {
+                        lock.lock()
+                        urls.append(fileURL.path)
+                        lock.unlock()
+                    }
+                    group.leave()
+                }
+            case let fileURL as URL:
+                lock.lock()
+                urls.append(fileURL.path)
+                lock.unlock()
+            default:
+                break
+            }
+        }
+        group.notify(queue: .main) {
+            self.channel.invokeMethod("performOperation", arguments: urls)
+        }
+        return true
+    }
+
+    private func convertPoint(_ location: NSPoint) -> [CGFloat] {
+        return [location.x, bounds.height - location.y]
+    }
+}
+
 class MainFlutterWindow: NSWindow {
     private static let fullscreenWorkAreaSizes = NSMapTable<NSWindow, NSValue>(
         keyOptions: [.weakMemory, .objectPointerPersonality],
@@ -73,7 +162,10 @@ class MainFlutterWindow: NSWindow {
             // DesktopLifecyclePlugin.register(with: controller.registrar(forPlugin: "DesktopLifecyclePlugin"))
             // Note: copy below from above RegisterGeneratedPlugins
             self.setMethodHandler(registrar: controller.registrar(forPlugin: "RustDeskPlugin"))
-            DesktopDropPlugin.register(with: controller.registrar(forPlugin: "DesktopDropPlugin"))
+            // desktop_drop's register() always attaches its drop view to the *main* window,
+            // so drops onto a sub-window (remote desktop, file transfer) never arrived.
+            // Attach an equivalent drop view to this sub-window itself.
+            SubWindowDropTarget.attach(to: controller)
             DeviceInfoPlusMacosPlugin.register(with: controller.registrar(forPlugin: "DeviceInfoPlusMacosPlugin"))
             FlutterCustomCursorPlugin.register(with: controller.registrar(forPlugin: "FlutterCustomCursorPlugin"))
             FPPPackageInfoPlusPlugin.register(with: controller.registrar(forPlugin: "FPPPackageInfoPlusPlugin"))

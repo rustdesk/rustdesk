@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/scheduler.dart';
@@ -958,6 +959,31 @@ class _RemotePageState extends State<RemotePage>
     );
   }
 
+  /// Drag and drop files from the local file manager onto the remote desktop.
+  /// The remote cursor follows the drag, and on drop the files are offered to
+  /// the peer, which drops them at the cursor (e.g. into an Explorer folder).
+  Widget _buildDropFilesTarget(Widget child) {
+    if (!isMacOS) return child;
+    return DropTarget(
+      onDragUpdated: (details) {
+        _ffi.inputModel.onDragFilesMove(details.globalPosition);
+      },
+      onDragDone: (details) {
+        _ffi.inputModel.onDragFilesMove(details.globalPosition);
+        final paths = details.files
+            .map((f) => f.path)
+            .where((p) => p.isNotEmpty)
+            .toList();
+        if (paths.isEmpty) return;
+        final ok = bind.sessionDropFiles(sessionId: sessionId, paths: paths);
+        if (!ok) {
+          showToast(translate('drag-drop-files-unavailable-tip'));
+        }
+      },
+      child: child,
+    );
+  }
+
   Widget getBodyForDesktop(BuildContext context) {
     var paints = <Widget>[
       MouseRegion(
@@ -983,9 +1009,9 @@ class _RemotePageState extends State<RemotePage>
                         cursorOverImage: _cursorOverImage,
                         keyboardEnabled: _keyboardEnabled,
                         remoteCursorMoved: _remoteCursorMoved,
-                        listenerBuilder: (child) =>
+                        listenerBuilder: (child) => _buildDropFilesTarget(
                             _buildRawTouchAndPointerRegion(
-                                child, enterView, leaveView),
+                                child, enterView, leaveView)),
                         ffi: _ffi,
                       );
                     }),

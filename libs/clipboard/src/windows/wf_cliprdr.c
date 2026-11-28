@@ -34,6 +34,8 @@
 #include <tchar.h>
 
 #include <strsafe.h>
+#include <stdio.h>
+#include <stdarg.h>
 
 #include <windef.h>
 
@@ -450,6 +452,10 @@ struct wf_clipboard
 
 	LPDATAOBJECT data_obj;
 	HANDLE data_obj_mutex;
+	/* Set by a format list carrying RUSTDESK_DRAG_DROP_FORMAT_NAME, cleared once the
+	 * drag and drop for it has been started. Only touched on the STA and under
+	 * format_map_lock in wf_cliprdr_server_format_list. */
+	volatile LONG drag_drop_pending;
 
 	ULONG req_fsize;
 	char *req_fdata;
@@ -483,6 +489,12 @@ typedef struct wf_clipboard wfClipboard;
 #define OLE_SETCLIPBOARD 1
 #define DELAYED_RENDERING 2
 #define OLE_EMPTYCLIPBOARD 3
+/* Start a native drag and drop of the current file data object at the cursor. */
+#define OLE_DODRAGDROP 4
+
+/* Format name the peer appends to a file format list when the files were dropped
+ * onto the remote view. Must match DRAG_DROP_FORMAT_NAME in src/clipboard_file.rs. */
+#define RUSTDESK_DRAG_DROP_FORMAT_NAME "RustDeskDragDrop"
 
 BOOL wf_cliprdr_init(wfClipboard *clipboard, CliprdrClientContext *cliprdr);
 BOOL wf_cliprdr_uninit(wfClipboard *clipboard, CliprdrClientContext *cliprdr);
@@ -2155,6 +2167,203 @@ static UINT cliprdr_send_response_filecontents(
 														  &fileContentsResponse);
 }
 
+
+/***********************************************************************************
+ * Drag and drop of files dropped onto the remote view.
+ *
+ * The peer has already offered the files through the clipboard file channel, so
+ * clipboard->data_obj serves FileGroupDescriptorW / FileContents. Hand that same
+ * object to DoDragDrop at the cursor position (the peer moved the cursor to the
+ * drop point). The drop source ends the drag by itself after a short moment, so
+ * the target under the cursor (an Explorer folder, the desktop or any application
+ * accepting virtual files) receives a normal drop and copies the files.
+ **********************************************************************************/
+
+/* Drag and drop diagnostics: %TEMP%\rustdesk-dragdrop.log */
+static void wf_dd_log(const char *fmt, ...)
+{
+	char path[MAX_PATH];
+	DWORD n = GetTempPathA(MAX_PATH, path);
+	FILE *f = NULL;
+	SYSTEMTIME st;
+	va_list args;
+	if (n == 0 || n > MAX_PATH - 32)
+		return;
+	if (FAILED(StringCchCatA(path, MAX_PATH, "rustdesk-dragdrop.log")))
+		return;
+	if (fopen_s(&f, path, "a") != 0 || !f)
+		return;
+	GetLocalTime(&st);
+	fprintf(f, "%02u:%02u:%02u.%03u [pid %lu] ", st.wHour, st.wMinute, st.wSecond,
+	        st.wMilliseconds, GetCurrentProcessId());
+	va_start(args, fmt);
+	vfprintf(f, fmt, args);
+	va_end(args);
+	fputc('\n', f);
+	fclose(f);
+}
+
+typedef struct
+{
+	IDropSource iDropSource;
+	LONG refs;
+	DWORD start_tick;
+	UINT calls;
+} CliprdrDropSource;
+
+/* Let the target see DragEnter/DragOver before the drop. */
+#define WF_DRAG_DROP_MIN_MS 250
+#define WF_DRAG_DROP_MIN_CALLS 3
+/* Never keep the drag loop alive for long if something goes wrong. */
+#define WF_DRAG_DROP_TIMEOUT_MS 5000
+
+static HRESULT STDMETHODCALLTYPE CliprdrDropSource_QueryInterface(IDropSource *This, REFIID riid,
+																   void **ppvObject)
+{
+	if (!ppvObject)
+		return E_INVALIDARG;
+	if (IsEqualIID(riid, &IID_IDropSource) || IsEqualIID(riid, &IID_IUnknown))
+	{
+		IDropSource_AddRef(This);
+		*ppvObject = This;
+		return S_OK;
+	}
+	*ppvObject = NULL;
+	return E_NOINTERFACE;
+}
+
+static ULONG STDMETHODCALLTYPE CliprdrDropSource_AddRef(IDropSource *This)
+{
+	CliprdrDropSource *instance = (CliprdrDropSource *)This;
+	return (ULONG)InterlockedIncrement(&instance->refs);
+}
+
+static ULONG STDMETHODCALLTYPE CliprdrDropSource_Release(IDropSource *This)
+{
+	CliprdrDropSource *instance = (CliprdrDropSource *)This;
+	LONG count = InterlockedDecrement(&instance->refs);
+	if (count == 0)
+	{
+		free(instance->iDropSource.lpVtbl);
+		free(instance);
+	}
+	return (ULONG)count;
+}
+
+static void wf_drag_drop_nudge_cursor(UINT calls)
+{
+	/* A tiny back-and-forth move keeps the drag loop busy and makes the target
+	 * under the cursor receive DragOver. */
+	INPUT input;
+	ZeroMemory(&input, sizeof(input));
+	input.type = INPUT_MOUSE;
+	input.mi.dx = (calls % 2) ? 1 : -1;
+	input.mi.dy = 0;
+	input.mi.dwFlags = MOUSEEVENTF_MOVE;
+	SendInput(1, &input, sizeof(INPUT));
+}
+
+static HRESULT STDMETHODCALLTYPE CliprdrDropSource_QueryContinueDrag(IDropSource *This,
+																	  BOOL fEscapePressed,
+																	  DWORD grfKeyState)
+{
+	CliprdrDropSource *instance = (CliprdrDropSource *)This;
+	DWORD elapsed;
+	(void)grfKeyState;
+
+	if (fEscapePressed)
+		return DRAGDROP_S_CANCEL;
+
+	instance->calls++;
+	elapsed = GetTickCount() - instance->start_tick;
+	if (elapsed > WF_DRAG_DROP_TIMEOUT_MS)
+		return DRAGDROP_S_CANCEL;
+
+	if (instance->calls < WF_DRAG_DROP_MIN_CALLS || elapsed < WF_DRAG_DROP_MIN_MS)
+	{
+		wf_drag_drop_nudge_cursor(instance->calls);
+		Sleep(10);
+		return S_OK;
+	}
+	return DRAGDROP_S_DROP;
+}
+
+static HRESULT STDMETHODCALLTYPE CliprdrDropSource_GiveFeedback(IDropSource *This, DWORD dwEffect)
+{
+	(void)This;
+	(void)dwEffect;
+	return DRAGDROP_S_USEDEFAULTCURSORS;
+}
+
+static IDropSource *CliprdrDropSource_New(void)
+{
+	CliprdrDropSource *instance = (CliprdrDropSource *)calloc(1, sizeof(CliprdrDropSource));
+	IDropSourceVtbl *vtbl;
+	if (!instance)
+		return NULL;
+	vtbl = (IDropSourceVtbl *)calloc(1, sizeof(IDropSourceVtbl));
+	if (!vtbl)
+	{
+		free(instance);
+		return NULL;
+	}
+	vtbl->QueryInterface = CliprdrDropSource_QueryInterface;
+	vtbl->AddRef = CliprdrDropSource_AddRef;
+	vtbl->Release = CliprdrDropSource_Release;
+	vtbl->QueryContinueDrag = CliprdrDropSource_QueryContinueDrag;
+	vtbl->GiveFeedback = CliprdrDropSource_GiveFeedback;
+	instance->iDropSource.lpVtbl = vtbl;
+	instance->refs = 1;
+	instance->start_tick = GetTickCount();
+	instance->calls = 0;
+	return &instance->iDropSource;
+}
+
+static void wf_do_drag_drop(wfClipboard *clipboard)
+{
+	IDataObject *data_obj = NULL;
+	IDropSource *drop_source = NULL;
+	DWORD effect = DROPEFFECT_NONE;
+	HRESULT hr;
+
+	if (!clipboard)
+		return;
+
+	if (WaitForSingleObject(clipboard->data_obj_mutex, INFINITE) != WAIT_OBJECT_0)
+		return;
+	data_obj = clipboard->data_obj;
+	if (data_obj)
+		IDataObject_AddRef(data_obj);
+	ReleaseMutex(clipboard->data_obj_mutex);
+
+	if (!data_obj)
+	{
+		wf_dd_log("drag and drop: no file data object");
+		return;
+	}
+
+	drop_source = CliprdrDropSource_New();
+	if (!drop_source)
+	{
+		IDataObject_Release(data_obj);
+		return;
+	}
+
+	{
+		POINT pt = {0, 0};
+		HWND under = NULL;
+		GetCursorPos(&pt);
+		under = WindowFromPoint(pt);
+		wf_dd_log("DoDragDrop start at (%ld, %ld), window under cursor %p", pt.x, pt.y, under);
+	}
+	hr = DoDragDrop(data_obj, drop_source, DROPEFFECT_COPY, &effect);
+	wf_dd_log("DoDragDrop returned 0x%08lx, effect %lu, QueryContinueDrag calls %u", hr, effect,
+	          ((CliprdrDropSource *)drop_source)->calls);
+
+	IDropSource_Release(drop_source);
+	IDataObject_Release(data_obj);
+}
+
 static LRESULT CALLBACK cliprdr_proc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
 {
 	static wfClipboard *clipboard = NULL;
@@ -2296,8 +2505,16 @@ static LRESULT CALLBACK cliprdr_proc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM 
 				HRESULT res = OleSetClipboard(clipboard->data_obj);
 				if (res != S_OK)
 				{
+					if (clipboard->drag_drop_pending)
+						wf_dd_log("OleSetClipboard failed 0x%08lx", res);
 					wf_destroy_file_obj(clipboard->data_obj);
 					clipboard->data_obj = NULL;
+				}
+				else if (InterlockedExchange(&clipboard->drag_drop_pending, 0))
+				{
+					wf_dd_log("clipboard file object set, starting drag and drop");
+					/* Run the drag after the mutex is released, from a fresh message. */
+					PostMessage(clipboard->hwnd, WM_CLIPRDR_MESSAGE, OLE_DODRAGDROP, 0);
 				}
 			}
 			free((void *)lParam);
@@ -2307,6 +2524,11 @@ static LRESULT CALLBACK cliprdr_proc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM 
 				// critical error!!!
 			}
 
+			break;
+
+		case OLE_DODRAGDROP:
+			DEBUG_CLIPRDR("info: OLE_DODRAGDROP");
+			wf_do_drag_drop(clipboard);
 			break;
 
 		case OLE_EMPTYCLIPBOARD:
@@ -3113,6 +3335,18 @@ static UINT wf_cliprdr_server_format_list(CliprdrClientContext *context,
 		goto fail;
 
 	clipboard->copied = TRUE;
+	InterlockedExchange(&clipboard->drag_drop_pending, 0);
+	for (i = 0; i < formatList->numFormats; i++)
+	{
+		if (formatList->formats[i].formatName &&
+			strncmp(formatList->formats[i].formatName, RUSTDESK_DRAG_DROP_FORMAT_NAME,
+			        sizeof(RUSTDESK_DRAG_DROP_FORMAT_NAME)) == 0)
+		{
+			InterlockedExchange(&clipboard->drag_drop_pending, 1);
+			wf_dd_log("format list with drag and drop marker received, %u formats",
+			          formatList->numFormats);
+		}
+	}
 
 	for (i = 0; i < formatList->numFormats; i++)
 	{
@@ -3182,6 +3416,9 @@ static UINT wf_cliprdr_server_format_list(CliprdrClientContext *context,
 	}
 	ReleaseSRWLockExclusive(&clipboard->format_map_lock);
 
+	if (clipboard->drag_drop_pending)
+		wf_dd_log("drag and drop: file formats %s, files enabled %d",
+		          file_transferring(clipboard) ? "present" : "missing", (int)context->EnableFiles);
 	if (file_transferring(clipboard))
 	{
 		if (context->EnableFiles)

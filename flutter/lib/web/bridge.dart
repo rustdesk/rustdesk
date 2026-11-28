@@ -458,6 +458,13 @@ class RustdeskImpl {
         () => js.context.callMethod('setByName', ['custom-fps', fps]));
   }
 
+  bool sessionDropFiles(
+      {required UuidValue sessionId,
+      required List<String> paths,
+      dynamic hint}) {
+    return false;
+  }
+
   Future<void> sessionLockScreen({required UuidValue sessionId, dynamic hint}) {
     return Future(() => js.context.callMethod('setByName', ['lock_screen']));
   }
