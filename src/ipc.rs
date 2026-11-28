@@ -1599,16 +1599,12 @@ pub async fn connect(ms_timeout: u64, postfix: &str) -> ResultType<ConnectionTmp
     }
 }
 
-/// For `_service`, all UIDs connect to the same socket and the server must run as root.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 pub async fn connect_for_uid(
     ms_timeout: u64,
     uid: u32,
     postfix: &str,
 ) -> ResultType<ConnectionTmpl<ConnClient>> {
-    if postfix == crate::POSTFIX_SERVICE {
-        return connect_root_service(ms_timeout).await;
-    }
     let path = Config::ipc_path_for_uid(uid, postfix);
     let conn = connect_with_path(ms_timeout, &path).await?;
     #[cfg(target_os = "macos")]
