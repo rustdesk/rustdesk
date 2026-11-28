@@ -231,6 +231,13 @@ pub fn is_file_data_request(msg: &Cliprdr) -> bool {
     )
 }
 
+/// Extra entry appended to a file `FormatList` when the files were dropped onto
+/// the remote view (drag and drop) instead of copied. The Windows peer uses it to
+/// start a native drag-and-drop at the current cursor position, so the files land
+/// exactly where they were dropped. Older peers just ignore the unknown format.
+pub const DRAG_DROP_FORMAT_ID: i32 = 0x7DD0;
+pub const DRAG_DROP_FORMAT_NAME: &str = "RustDeskDragDrop";
+
 #[cfg(feature = "unix-file-copy-paste")]
 pub mod unix_file_clip {
     use super::*;
