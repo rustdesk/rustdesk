@@ -74,6 +74,7 @@ jobs:
         if: ${{ inputs.use-cache }}
         with:
           prefix-key: bridge-${{ matrix.job.os }}
+          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: Cache Bridge
         id: cache-bridge

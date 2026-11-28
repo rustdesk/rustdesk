@@ -1,0 +1,23 @@
+name: Save the vcpkg binary cache
+description: >-
+  Saves what vcpkg-cache-restore set up, but only when this run built a package that was not in
+  the cache, so an unchanged run does not store another copy.
+inputs:
+  name:
+    description: The same name that was given to vcpkg-cache-restore.
+    required: true
+runs:
+  using: composite
+  steps:
+    - id: built
+      shell: bash
+      run: |
+        dir="$(cygpath -m "$RUNNER_TEMP" 2>/dev/null || echo "$RUNNER_TEMP")/vcpkg-bincache"
+        if [ -n "$(find "$dir" -name '*.zip' -newer "$dir/.restored" -print -quit)" ]; then
+          echo "any=true" >> "$GITHUB_OUTPUT"
+        fi
+    - if: steps.built.outputs.any == 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ runner.temp }}/vcpkg-bincache
+        key: vcpkg-bin-${{ runner.os }}-${{ runner.arch }}-${{ inputs.name }}-${{ github.run_id }}-${{ github.run_attempt }}
