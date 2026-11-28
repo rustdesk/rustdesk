@@ -204,17 +204,77 @@ pub fn reset_input_cache() {}
 
 pub fn get_cursor() -> ResultType<Option<u64>> {
     unsafe {
-        #[allow(invalid_value)]
-        let mut ci: CURSORINFO = mem::MaybeUninit::uninit().assume_init();
+        let mut ci: CURSORINFO = mem::zeroed();
         ci.cbSize = std::mem::size_of::<CURSORINFO>() as _;
         if crate::portable_service::client::get_cursor_info(&mut ci) == FALSE {
             return Err(io::Error::last_os_error().into());
         }
-        if ci.flags & CURSOR_SHOWING == 0 {
-            Ok(None)
-        } else {
-            Ok(Some(ci.hCursor as _))
+        Ok(remote_cursor_handle(&ci))
+    }
+}
+
+fn remote_cursor_handle(ci: &CURSORINFO) -> Option<u64> {
+    if ci.flags & CURSOR_SUPPRESSED != 0 {
+        return None;
+    }
+    let arrow = unsafe { LoadCursorW(null_mut(), IDC_ARROW) };
+    if ci.flags & CURSOR_SHOWING != 0 && !ci.hCursor.is_null() && ci.hCursor != arrow {
+        return Some(ci.hCursor as u64);
+    }
+    let window = unsafe { WindowFromPoint(ci.ptScreenPos) };
+    if let Some(cursor) = resize_cursor_on_hover(window, ci.ptScreenPos) {
+        return Some(cursor);
+    }
+    if !ci.hCursor.is_null() {
+        return Some(ci.hCursor as u64);
+    }
+    if !window.is_null() {
+        let cursor = unsafe { GetClassLongPtrW(window, GCLP_HCURSOR) };
+        if cursor != 0 {
+            return Some(cursor as u64);
         }
+    }
+    (!arrow.is_null()).then_some(arrow as u64)
+}
+
+fn resize_cursor_on_hover(window: HWND, point: POINT) -> Option<u64> {
+    if window.is_null() {
+        return None;
+    }
+    // WM_NCHITTEST takes signed 16-bit screen coordinates, including on x64.
+    let x = i16::try_from(point.x).ok()? as u16;
+    let y = i16::try_from(point.y).ok()? as u16;
+    let coords = ((u32::from(y) << 16) | u32::from(x)) as LPARAM;
+    unsafe {
+        if GetAsyncKeyState(VK_LBUTTON) < 0 || GetAsyncKeyState(VK_RBUTTON) < 0 {
+            return None;
+        }
+        // A resizable child (e.g. MDI) has its own frame. For other controls
+        // ask the containing window, which also knows about custom title bars.
+        let frame = if GetWindowLongW(window, GWL_STYLE) as u32 & WS_THICKFRAME != 0 {
+            window
+        } else {
+            GetAncestor(window, GA_ROOT)
+        };
+        if frame.is_null() || frame == GetDesktopWindow() || IsZoomed(frame) != 0 {
+            return None;
+        }
+        let mut hit = 0;
+        if SendMessageTimeoutW(
+            frame, WM_NCHITTEST, 0, coords,
+            SMTO_ABORTIFHUNG | SMTO_BLOCK | SMTO_ERRORONEXIT, 15, &mut hit,
+        ) == 0 {
+            return None;
+        }
+        let resource = match hit as LRESULT {
+            HTLEFT | HTRIGHT => IDC_SIZEWE,
+            HTTOP | HTBOTTOM => IDC_SIZENS,
+            HTTOPLEFT | HTBOTTOMRIGHT => IDC_SIZENWSE,
+            HTTOPRIGHT | HTBOTTOMLEFT => IDC_SIZENESW,
+            _ => return None,
+        };
+        let cursor = LoadCursorW(null_mut(), resource);
+        (!cursor.is_null()).then_some(cursor as u64)
     }
 }
 
@@ -5012,6 +5072,92 @@ pub(super) fn get_pids_with_first_arg_by_wmic<S1: AsRef<str>, S2: AsRef<str>>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn remote_cursor_changes_on_hover_from_resize_edge_to_client_area() {
+        // Keep WindowFromPoint and the mouse button state independent of the user's desktop.
+        let name = wide_string(&format!("RustDeskHoverTest{}", std::process::id()));
+        let desktop = unsafe {
+            CreateDesktopW(
+                name.as_ptr(),
+                std::ptr::null(),
+                null_mut(),
+                0,
+                DESKTOP_CREATEWINDOW | DESKTOP_READOBJECTS | DESKTOP_WRITEOBJECTS,
+                null_mut(),
+            )
+        };
+        assert!(!desktop.is_null(), "{}", io::Error::last_os_error());
+        let desktop_id = desktop as usize;
+        let result = std::thread::spawn(move || unsafe {
+            assert_ne!(SetThreadDesktop(desktop_id as _), 0);
+            let class = wide_string("RustDeskHoverTestFrame");
+            let mut wc: WNDCLASSW = mem::zeroed();
+            wc.lpfnWndProc = Some(DefWindowProcW);
+            wc.hInstance = winapi::um::libloaderapi::GetModuleHandleW(std::ptr::null());
+            wc.lpszClassName = class.as_ptr();
+            assert_ne!(RegisterClassW(&wc), 0);
+            let window = CreateWindowExW(
+                WS_EX_NOACTIVATE,
+                class.as_ptr(),
+                std::ptr::null(),
+                WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+                100,
+                100,
+                400,
+                260,
+                null_mut(),
+                null_mut(),
+                wc.hInstance,
+                null_mut(),
+            );
+            assert!(!window.is_null(), "{}", io::Error::last_os_error());
+            let mut rect: RECT = mem::zeroed();
+            assert_ne!(GetWindowRect(window, &mut rect), 0);
+            let arrow = LoadCursorW(null_mut(), IDC_ARROW);
+            let resize = LoadCursorW(null_mut(), IDC_SIZEWE);
+            assert!(!arrow.is_null() && !resize.is_null());
+            let mut ci: CURSORINFO = mem::zeroed();
+            ci.hCursor = arrow; // Windows reports an arrow while local drawing is hidden.
+            ci.ptScreenPos = POINT {
+                x: rect.left + 1,
+                y: (rect.top + rect.bottom) / 2,
+            };
+            let edge = remote_cursor_handle(&ci);
+            ci.ptScreenPos.x = (rect.left + rect.right) / 2;
+            let client = remote_cursor_handle(&ci);
+            DestroyWindow(window);
+            UnregisterClassW(class.as_ptr(), wc.hInstance);
+            assert_eq!(edge, Some(resize as u64));
+            assert_eq!(client, Some(arrow as u64));
+        })
+        .join();
+        unsafe { CloseDesktop(desktop) };
+        result.unwrap();
+    }
+
+    #[test]
+    fn remote_cursor_leaves_resize_when_windows_stops_drawing_the_pointer() {
+        unsafe {
+            let mut ci: CURSORINFO = mem::zeroed();
+            ci.ptScreenPos = POINT { x: i32::MIN, y: i32::MIN };
+            let arrow = LoadCursorW(null_mut(), IDC_ARROW);
+            let resize = LoadCursorW(null_mut(), IDC_SIZEWE);
+            let text = LoadCursorW(null_mut(), IDC_IBEAM);
+            assert!(!arrow.is_null() && !resize.is_null() && !text.is_null());
+            ci.flags = CURSOR_SHOWING;
+            ci.hCursor = resize;
+            assert_eq!(remote_cursor_handle(&ci), Some(resize as u64));
+            ci.flags = 0;
+            ci.hCursor = text;
+            assert_eq!(remote_cursor_handle(&ci), Some(text as u64));
+            ci.hCursor = null_mut();
+            assert_eq!(remote_cursor_handle(&ci), Some(arrow as u64));
+            ci.flags = CURSOR_SUPPRESSED;
+            ci.hCursor = text;
+            assert_eq!(remote_cursor_handle(&ci), None);
+        }
+    }
 
     #[test]
     fn vbs_files_use_utf16le_with_bom_and_crlf() {
