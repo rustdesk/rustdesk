@@ -6,7 +6,7 @@ use crate::trusted_devices::{
 };
 use base::message_proto::LoginResponse;
 
-impl Connection {
+impl Connection<'_> {
     pub(super) async fn begin_trusted_device(&mut self) -> bool {
         if self.conn_audit_primary_auth != ConnAuditPrimaryAuth::PermanentPassword
             || (!self.stream.is_secured() && !crate::common::is_direct_ip_access(&self.lr.username))

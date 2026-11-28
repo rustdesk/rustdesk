@@ -367,10 +367,10 @@ impl TerminalUserToken {
         }
     }
 }
-pub struct Connection {
+pub struct Connection<'a> {
     inner: ConnInner,
     display_idx: usize,
-    stream: super::Stream,
+    stream: &'a mut Stream,
     server: super::ServerPtrWeak,
     hash: Hash,
     read_jobs: Vec<fs::TransferJob>,
@@ -542,19 +542,36 @@ fn drm_can_serve_login_screen() -> bool {
     false
 }
 
-impl Connection {
+impl Connection<'_> {
     pub async fn start(
         addr: SocketAddr,
-        stream: super::Stream,
+        mut stream: super::Stream,
         id: i32,
         server: super::ServerPtrWeak,
         meta: super::ConnectionMeta,
         unauthorized: UnauthorizedID,
     ) {
+        let is_kcp = meta.is_kcp;
+        let sent_close_reason =
+            Self::_start(addr, &mut stream, id, server, meta, unauthorized).await;
+        if sent_close_reason {
+            // Only the transport is needed here. Session cleanup must not wait for the peer.
+            wait_for_peer_close(&mut stream, is_kcp).await;
+        }
+    }
+
+    async fn _start(
+        addr: SocketAddr,
+        stream: &mut Stream,
+        id: i32,
+        server: super::ServerPtrWeak,
+        meta: super::ConnectionMeta,
+        unauthorized: UnauthorizedID,
+    ) -> bool {
         let super::ConnectionMeta {
             control_permissions,
             controlled_context,
-            is_kcp,
+            ..
         } = meta;
         // Android is not supported yet, so we always set control_permissions to None.
         #[cfg(target_os = "android")]
@@ -584,7 +601,7 @@ impl Connection {
 
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let tx_cloned = tx.clone();
-        let mut conn = Self {
+        let mut conn = Connection {
             inner: ConnInner {
                 id,
                 tx: Some(tx),
@@ -691,7 +708,7 @@ impl Connection {
             conn.closed = true;
             // sleep to ensure msg got received.
             sleep(1.).await;
-            return;
+            return false;
         }
         #[cfg(target_os = "android")]
         start_channel(rx_to_cm, tx_from_cm);
@@ -1088,7 +1105,7 @@ impl Connection {
                 _ = conn.file_timer.tick() => {
                     if !conn.read_jobs.is_empty() {
                         conn.send_to_cm(ipc::Data::FileTransferLog(("transfer".to_string(), fs::serialize_transfer_jobs(&conn.read_jobs))));
-                        match fs::handle_read_jobs(&mut conn.read_jobs, &mut conn.stream).await {
+                        match fs::handle_read_jobs(&mut conn.read_jobs, conn.stream).await {
                             Ok(log) => {
                                 if !log.is_empty() {
                                     conn.send_to_cm(ipc::Data::FileTransferLog(("transfer".to_string(), log)));
@@ -1296,10 +1313,8 @@ impl Connection {
             try_stop_record_cursor_pos();
         }
         conn.on_close("End", true).await;
-        if conn.sent_close_reason {
-            wait_for_peer_close(&mut conn.stream, is_kcp).await;
-        }
         log::info!("#{} connection loop exited", id);
+        conn.sent_close_reason
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -1856,7 +1871,7 @@ impl Connection {
             return true;
         };
         if pf.multiplex {
-            crate::port_forward_mux::cap_packet_size(&mut self.stream);
+            crate::port_forward_mux::cap_packet_size(self.stream);
             // `inner.tx` is set for the connection's whole life; `None` here is
             // unreachable, and refusing the login is the only honest answer.
             self.port_forward_mux = self.inner.tx.clone().map(|tx| {
@@ -6902,7 +6917,7 @@ impl Default for PortableState {
     }
 }
 
-impl Drop for Connection {
+impl Drop for Connection<'_> {
     fn drop(&mut self) {
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         self.release_pressed_modifiers();
