@@ -62,6 +62,10 @@ env:
   PUBLISH_UPDATE_METADATA: "${{ inputs.publish-update-metadata }}"
   SIGN_BASE_URL: "${{ secrets.SIGN_BASE_URL }}-2"
 
+# Builds that publish (upload-artifact: nightly and tags) neither restore nor save a cache: the
+# rust-cache, run-vcpkg, run-on-arch image and bridge caches are skipped there, and so is exporting
+# the cache token to the build steps. Other workflow runs can write those caches, so a published
+# binary must not be built from one. CI runs keep them.
 jobs:
   validate-update-metadata-keys:
     runs-on: ubuntu-22.04
@@ -131,6 +135,8 @@ jobs:
   generate-bridge:
     needs: [validate-update-metadata-keys]
     uses: ./.github/workflows/bridge.yml
+    with:
+      use-cache: ${{ !inputs.upload-artifact }}
 
   build-RustDeskTempTopMostWindow:
     needs: [validate-update-metadata-keys]
@@ -184,6 +190,7 @@ jobs:
             }
     steps:
       - name: Export GitHub Actions cache environment variables
+        if: ${{ !inputs.upload-artifact }}
         uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
         with:
           script: |
@@ -294,6 +301,7 @@ jobs:
           components: "rustfmt"
 
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        if: ${{ !inputs.upload-artifact }}
         with:
           prefix-key: ${{ matrix.job.os }}
 
@@ -302,7 +310,7 @@ jobs:
         with:
           vcpkgDirectory: C:\vcpkg
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
-          doNotCache: false
+          doNotCache: ${{ inputs.upload-artifact }}
 
       - name: Install vcpkg dependencies
         env:
@@ -601,6 +609,7 @@ jobs:
           # - { target: aarch64-pc-windows-msvc, os: windows-2022 }
     steps:
       - name: Export GitHub Actions cache environment variables
+        if: ${{ !inputs.upload-artifact }}
         uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
         with:
           script: |
@@ -634,6 +643,7 @@ jobs:
           rustup default nightly-2023-10-13-${{ matrix.job.target }} --force-non-host
 
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        if: ${{ !inputs.upload-artifact }}
         with:
           prefix-key: ${{ matrix.job.os }}-sciter
 
@@ -642,7 +652,7 @@ jobs:
         with:
           vcpkgDirectory: C:\vcpkg
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
-          doNotCache: false
+          doNotCache: ${{ inputs.upload-artifact }}
 
       - name: Install vcpkg dependencies
         env:
@@ -809,6 +819,7 @@ jobs:
             }
     steps:
       - name: Export GitHub Actions cache environment variables
+        if: ${{ !inputs.upload-artifact }}
         uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
         with:
           script: |
@@ -840,7 +851,7 @@ jobs:
         uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
         with:
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
-          doNotCache: false
+          doNotCache: ${{ inputs.upload-artifact }}
 
       - name: Install vcpkg dependencies
         run: |
@@ -868,6 +879,7 @@ jobs:
           components: "rustfmt"
 
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        if: ${{ !inputs.upload-artifact }}
         with:
           prefix-key: rustdesk-lib-cache-ios
           key: ${{ matrix.job.target }}
@@ -941,6 +953,7 @@ jobs:
             }
     steps:
       - name: Export GitHub Actions cache environment variables
+        if: ${{ !inputs.upload-artifact }}
         uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
         with:
           script: |
@@ -1053,6 +1066,7 @@ jobs:
           components: "rustfmt"
 
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        if: ${{ !inputs.upload-artifact }}
         with:
           prefix-key: ${{ matrix.job.os }}
 
@@ -1073,7 +1087,7 @@ jobs:
         uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
         with:
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
-          doNotCache: false
+          doNotCache: ${{ inputs.upload-artifact }}
 
       - name: Install vcpkg dependencies
         run: |
@@ -1467,6 +1481,7 @@ jobs:
           swap-storage: false
 
       - name: Export GitHub Actions cache environment variables
+        if: ${{ !inputs.upload-artifact }}
         uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
         with:
           script: |
@@ -1550,7 +1565,7 @@ jobs:
         with:
           vcpkgDirectory: /opt/artifacts/vcpkg
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
-          doNotCache: false
+          doNotCache: ${{ inputs.upload-artifact }}
 
       - name: Install vcpkg dependencies
         run: |
@@ -1593,6 +1608,7 @@ jobs:
           components: "rustfmt"
 
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        if: ${{ !inputs.upload-artifact }}
         with:
           prefix-key: rustdesk-lib-cache-android # TODO: drop '-android' part after caches are invalidated
           key: ${{ matrix.job.target }}
@@ -1754,6 +1770,7 @@ jobs:
           swap-storage: false
 
       - name: Export GitHub Actions cache environment variables
+        if: ${{ !inputs.upload-artifact }}
         uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
         with:
           script: |
@@ -1944,6 +1961,7 @@ jobs:
             }
     steps:
       - name: Export GitHub Actions cache environment variables
+        if: ${{ !inputs.upload-artifact }}
         uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
         with:
           script: |
@@ -2016,7 +2034,7 @@ jobs:
         with:
           vcpkgDirectory: /opt/artifacts/vcpkg
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
-          doNotCache: false
+          doNotCache: ${{ inputs.upload-artifact }}
 
       - name: Install vcpkg dependencies
         if: matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true'
@@ -2069,7 +2087,7 @@ jobs:
         with:
           arch: ${{ matrix.job.arch }}
           distro: ${{ matrix.job.distro }}
-          githubToken: ${{ github.token }}
+          githubToken: ${{ !inputs.upload-artifact && github.token || '' }}
           setup: |
             ls -l "${PWD}"
             ls -l /opt/artifacts/vcpkg/installed
@@ -2388,6 +2406,7 @@ jobs:
             }
     steps:
       - name: Export GitHub Actions cache environment variables
+        if: ${{ !inputs.upload-artifact }}
         uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
         with:
           script: |
@@ -2436,7 +2455,7 @@ jobs:
         with:
           arch: ${{ matrix.job.arch }}
           distro: ${{ matrix.job.distro }}
-          githubToken: ${{ github.token }}
+          githubToken: ${{ !inputs.upload-artifact && github.token || '' }}
           setup: |
             ls -l "${PWD}"
           dockerRunArgs: |
@@ -2708,7 +2727,7 @@ jobs:
         with:
           arch: ${{ matrix.job.arch }}
           distro: ${{ matrix.job.distro }}
-          githubToken: ${{ github.token }}
+          githubToken: ${{ !inputs.upload-artifact && github.token || '' }}
           setup: |
             ls -l "${PWD}"
           dockerRunArgs: |
