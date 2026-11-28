@@ -8,6 +8,7 @@ import 'package:flutter_hbb/common/formatter/id_formatter.dart';
 import 'package:flutter_hbb/common/hbbs/hbbs.dart';
 import 'package:flutter_hbb/common/widgets/peer_card.dart';
 import 'package:flutter_hbb/common/widgets/peers_view.dart';
+import 'package:flutter_hbb/common/widgets/resizable_side_panel.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
 import 'package:flutter_hbb/models/ab_model.dart';
@@ -83,7 +84,6 @@ class _AddressBookState extends State<AddressBook> {
                   border: Border.all(
                       color: Theme.of(context).colorScheme.background)),
               child: Container(
-                width: 200,
                 height: double.infinity,
                 child: Column(
                   children: [
@@ -103,7 +103,7 @@ class _AddressBookState extends State<AddressBook> {
                   ],
                 ),
               ),
-            ).marginOnly(right: 12.0)),
+            ).resizable(kOptionAbTagsPanelWidth, defaultWidth: 200)),
         _buildPeersViews()
       ],
     );
