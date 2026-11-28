@@ -95,6 +95,11 @@ validate_patch_inputs() {
   fi
 }
 
+# The lock diff reverses only once applied, so a restored pubspec.lock is not taken as patched.
+has_lock_patch() {
+  sed 's/\r$//' .github/patches/flutter_3.44_pubspec.lock.diff | git apply --reverse --check 2>/dev/null
+}
+
 is_complete_patch_state() {
   has_exact_count "$THEME_MATCHES" 'dialogTheme: DialogThemeData(' flutter/lib/common.dart &&
     has_exact_count "$THEME_MATCHES" 'tabBarTheme: const TabBarThemeData(' flutter/lib/common.dart &&
@@ -136,7 +141,7 @@ if ! validate_patch_inputs; then
   exit 1
 fi
 
-if is_complete_patch_state; then
+if is_complete_patch_state && has_lock_patch; then
   echo "Flutter 3.44 source patches already applied."
   git --no-pager diff -- flutter/lib/common.dart flutter/pubspec.yaml \
     flutter/lib/common/widgets/dialog.dart
