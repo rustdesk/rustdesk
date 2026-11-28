@@ -63,9 +63,10 @@ env:
   SIGN_BASE_URL: "${{ secrets.SIGN_BASE_URL }}-2"
 
 # Builds that publish (upload-artifact: nightly and tags) neither restore nor save a cache: the
-# rust-cache, run-vcpkg, run-on-arch image and bridge caches are skipped there, and so is exporting
+# vcpkg binary, run-vcpkg, run-on-arch image and bridge caches are skipped there, and so is exporting
 # the cache token to the build steps. Other workflow runs can write those caches, so a published
-# binary must not be built from one. CI runs keep them.
+# binary must not be built from one. CI runs keep them. There is no rust-cache here: its ~2 GB
+# entries never hit within the repository's 10 GB cache limit and evicted everything else.
 jobs:
   validate-update-metadata-keys:
     runs-on: ubuntu-22.04
@@ -299,12 +300,6 @@ jobs:
           toolchain: ${{ env.SCITER_RUST_VERSION }}
           targets: ${{ matrix.job.target }}
           components: "rustfmt"
-
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
-        if: ${{ !inputs.upload-artifact }}
-        with:
-          save-if: ${{ github.ref == 'refs/heads/master' }}
-          prefix-key: ${{ matrix.job.os }}
 
       - name: Setup vcpkg with Github Actions binary cache
         uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
@@ -657,12 +652,6 @@ jobs:
             --profile minimal --no-self-update --force-non-host
           rustup default nightly-2023-10-13-${{ matrix.job.target }} --force-non-host
 
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
-        if: ${{ !inputs.upload-artifact }}
-        with:
-          save-if: ${{ github.ref == 'refs/heads/master' }}
-          prefix-key: ${{ matrix.job.os }}-sciter
-
       - name: Setup vcpkg with Github Actions binary cache
         uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
         with:
@@ -923,13 +912,6 @@ jobs:
           targets: ${{ matrix.job.target }}
           components: "rustfmt"
 
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
-        if: ${{ !inputs.upload-artifact }}
-        with:
-          save-if: ${{ github.ref == 'refs/heads/master' }}
-          prefix-key: rustdesk-lib-cache-ios
-          key: ${{ matrix.job.target }}
-
       - name: Restore bridge files
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -1110,12 +1092,6 @@ jobs:
           toolchain: ${{ env.MAC_RUST_VERSION }}
           targets: ${{ matrix.job.target }}
           components: "rustfmt"
-
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
-        if: ${{ !inputs.upload-artifact }}
-        with:
-          save-if: ${{ github.ref == 'refs/heads/master' }}
-          prefix-key: ${{ matrix.job.os }}
 
       - name: Restore bridge files
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -1683,13 +1659,6 @@ jobs:
         with:
           toolchain: ${{ env.RUST_VERSION }}
           components: "rustfmt"
-
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
-        if: ${{ !inputs.upload-artifact }}
-        with:
-          save-if: ${{ github.ref == 'refs/heads/master' }}
-          prefix-key: rustdesk-lib-cache-android # TODO: drop '-android' part after caches are invalidated
-          key: ${{ matrix.job.target }}
 
       - name: Build rustdesk lib
         env:

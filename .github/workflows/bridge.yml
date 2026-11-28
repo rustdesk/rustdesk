@@ -70,12 +70,6 @@ jobs:
           targets: ${{ matrix.job.target }}
           components: "rustfmt"
 
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
-        if: ${{ inputs.use-cache }}
-        with:
-          prefix-key: bridge-${{ matrix.job.os }}
-          save-if: ${{ github.ref == 'refs/heads/master' }}
-
       - name: Cache Bridge
         id: cache-bridge
         if: ${{ inputs.use-cache }}
