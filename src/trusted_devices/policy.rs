@@ -8,6 +8,19 @@ pub const NEVER_EXPIRE: u32 = 0;
 pub const DAY_MILLIS: i64 = 24 * 60 * 60 * 1000;
 const AUTH_OPTIONS: [&str; 2] = ["2fa", keys::OPTION_ENABLE_TRUSTED_DEVICES];
 
+pub(crate) fn uses_windows_host_profile() -> bool {
+    #[cfg(windows)]
+    return uses_host_profile(crate::common::is_server_running(), crate::platform::is_root);
+    #[cfg(not(windows))]
+    false
+}
+
+#[cfg(any(windows, test))]
+fn uses_host_profile(server_running: bool, is_local_system: fn() -> bool) -> bool {
+    // LocalSystem CLI commands share the service's configuration file.
+    server_running || is_local_system()
+}
+
 pub fn days(options: &HashMap<String, String>) -> u32 {
     match options
         .get(keys::OPTION_TRUSTED_DEVICE_EXPIRATION)
@@ -100,4 +113,16 @@ pub fn expires_at(time: i64, days: u32) -> i64 {
         return 0;
     }
     time.saturating_add(i64::from(days) * DAY_MILLIS)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::uses_host_profile;
+
+    #[test]
+    fn windows_host_profile_includes_local_system_clients() {
+        assert!(!uses_host_profile(false, || false));
+        assert!(uses_host_profile(false, || true));
+        assert!(uses_host_profile(true, || false));
+    }
 }

@@ -1,5 +1,8 @@
 #[path = "ipc/auth.rs"]
 mod ipc_auth;
+#[cfg(all(windows, test))]
+#[path = "ipc/config_tests.rs"]
+pub(crate) mod config_tests;
 #[cfg(windows)]
 #[path = "ipc/windows.rs"]
 mod ipc_windows;
@@ -1080,7 +1083,8 @@ async fn handle(data: Data, stream: &mut Connection) {
         },
         Data::Options(value) => match value {
             None => {
-                let v = Config::get_options();
+                let mut v = Config::get_options();
+                remove_preserved_keys(&mut v);
                 allow_err!(stream.send(&Data::Options(Some(v))).await);
             }
             Some(value) => {
@@ -1159,6 +1163,8 @@ async fn handle(data: Data, stream: &mut Connection) {
             };
             #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
             let config2 = Config2::get();
+            let mut config2 = config2;
+            remove_preserved_keys(&mut config2.options);
             allow_err!(
                 stream
                     .send(&Data::SyncConfig(Some((Config::get(), config2).into())))
@@ -2020,11 +2026,25 @@ pub async fn get_rendezvous_server(ms_timeout: u64) -> (String, Vec<String>) {
     }
 }
 
+fn remove_preserved_keys(options: &mut HashMap<String, String>) {
+    for &key in keys::IPC_PRESERVED_KEYS {
+        options.remove(key);
+    }
+}
+
+fn cache_ipc_options(options: HashMap<String, String>) {
+    if crate::trusted_devices::config::uses_windows_host_profile() {
+        Config::set_options_preserving_keys(options, keys::IPC_PRESERVED_KEYS);
+    } else {
+        Config::set_options(options);
+    }
+}
+
 async fn get_options_(ms_timeout: u64) -> ResultType<HashMap<String, String>> {
     let mut c = connect(ms_timeout, "").await?;
     c.send(&Data::Options(None)).await?;
     if let Some(Data::Options(Some(value))) = c.next_timeout(ms_timeout).await? {
-        Config::set_options(value.clone());
+        cache_ipc_options(value.clone());
         Ok(value)
     } else {
         Ok(Config::get_options())
@@ -2059,7 +2079,8 @@ pub fn set_option(key: &str, value: &str) {
 }
 
 #[tokio::main(flavor = "current_thread")]
-pub async fn set_options(value: HashMap<String, String>) -> ResultType<()> {
+pub async fn set_options(mut value: HashMap<String, String>) -> ResultType<()> {
+    remove_preserved_keys(&mut value);
     let _nat = CheckTestNatType::new();
     let affected = crate::trusted_devices::config::changes_authentication(&value);
     let connection = connect(1000, "").await;
@@ -2080,8 +2101,10 @@ pub async fn set_options(value: HashMap<String, String>) -> ResultType<()> {
             _ if affected => bail!("The host did not confirm the configuration update"),
             _ => {}
         }
+        cache_ipc_options(value);
+    } else {
+        Config::set_options_preserving_keys(value, keys::IPC_PRESERVED_KEYS);
     }
-    Config::set_options(value);
     Ok(())
 }
 

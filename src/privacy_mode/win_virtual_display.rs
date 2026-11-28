@@ -31,7 +31,7 @@ use winapi::{
 
 pub(super) const PRIVACY_MODE_IMPL: &str = super::PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY;
 
-const CONFIG_KEY_REG_RECOVERY: &str = "reg_recovery";
+const CONFIG_KEY_REG_RECOVERY: &str = base::config::keys::OPTION_REG_RECOVERY;
 const STATE_CHECK_LOG_INTERVAL: Duration = Duration::from_secs(60);
 
 fn check_active_displays(displays: impl Iterator<Item = DISPLAY_DEVICEW>) -> ResultType<()> {

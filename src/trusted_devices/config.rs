@@ -1,4 +1,5 @@
 use super::policy;
+pub(crate) use super::policy::uses_windows_host_profile;
 pub use super::policy::{changes_authentication, update_options};
 use base::config::keys;
 use hbb_common::{
@@ -47,7 +48,11 @@ pub async fn update_auth<T: Send + 'static>(
 pub fn sync_config(value: Config, options: Config2) -> ResultType<()> {
     let _storage = super::storage()?;
     Config::set(value);
-    Config2::set(options.clone());
+    if uses_windows_host_profile() {
+        Config2::set_preserving_keys(options.clone(), keys::IPC_PRESERVED_KEYS);
+    } else {
+        Config2::set(options.clone());
+    }
     snapshot()?;
     // Explicit configuration sync carries the source's grants and removals.
     options.sync_trusted_devices()
@@ -226,7 +231,7 @@ pub(super) fn change<T>(affected: bool, apply: impl FnOnce() -> ResultType<T>) -
 
 pub fn set_options(options: HashMap<String, String>) -> ResultType<()> {
     policy::change_options(effective_options(options.clone()), || {
-        Config::set_options(options);
+        Config::set_options_preserving_keys(options, keys::IPC_PRESERVED_KEYS);
         Ok(())
     })
 }
@@ -270,7 +275,10 @@ pub fn set_config(value: Config) -> ResultType<bool> {
 
 pub fn set_config2(value: Config2) -> ResultType<bool> {
     policy::change_options(effective_options(value.options.clone()), || {
-        Ok(Config2::set(value))
+        Ok(Config2::set_preserving_keys(
+            value,
+            keys::IPC_PRESERVED_KEYS,
+        ))
     })
 }
 

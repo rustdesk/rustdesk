@@ -16,6 +16,7 @@ pub const OPTION_ENABLE_REMOTE_PRINTER: &str = "enable-remote-printer";
 pub const OPTION_DISABLE_CLIPBOARD: &str = "disable_clipboard";
 pub const OPTION_LOCK_AFTER_SESSION_END: &str = "lock_after_session_end";
 pub const OPTION_PRIVACY_MODE: &str = "privacy_mode";
+pub const OPTION_REG_RECOVERY: &str = "reg_recovery";
 pub const OPTION_TOUCH_MODE: &str = "touch-mode";
 pub const OPTION_SYNC_INIT_CLIPBOARD: &str = "sync-init-clipboard";
 pub const OPTION_THEME: &str = "theme";
@@ -187,6 +188,8 @@ pub const OPTION_KEEP_AWAKE_DURING_OUTGOING_SESSIONS: &str = "keep-awake-during-
 pub const OPTION_DISABLE_GROUP_PANEL: &str = "disable-group-panel";
 pub const OPTION_DISABLE_DISCOVERY_PANEL: &str = "disable-discovery-panel";
 pub const OPTION_PRE_ELEVATE_SERVICE: &str = "pre-elevate-service";
+
+pub const IPC_PRESERVED_KEYS: &[&str] = &[OPTION_REG_RECOVERY];
 
 // DEFAULT_DISPLAY_SETTINGS, OVERWRITE_DISPLAY_SETTINGS
 pub const KEYS_DISPLAY_SETTINGS: &[&str] = &[
