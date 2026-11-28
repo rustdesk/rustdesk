@@ -1,0 +1,30 @@
+name: Restore the vcpkg binary cache
+description: >-
+  For CI runs that publish nothing. Restores the vcpkg binary packages a master push saved for
+  this job, and outputs the VCPKG_BINARY_SOURCES value that reads and extends them.
+inputs:
+  name:
+    description: Tells this job's cache apart from the others, e.g. its Rust target.
+    required: true
+outputs:
+  binary-sources:
+    description: The value to give VCPKG_BINARY_SOURCES.
+    value: ${{ steps.dir.outputs.binary-sources }}
+runs:
+  using: composite
+  steps:
+    - id: dir
+      shell: bash
+      run: |
+        # vcpkg wants a native path; on Windows, cygpath turns RUNNER_TEMP into one with forward slashes.
+        dir="$(cygpath -m "$RUNNER_TEMP" 2>/dev/null || echo "$RUNNER_TEMP")/vcpkg-bincache"
+        mkdir -p "$dir"
+        echo "binary-sources=clear;files,$dir,readwrite" >> "$GITHUB_OUTPUT"
+    - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ runner.temp }}/vcpkg-bincache
+        key: vcpkg-bin-${{ runner.os }}-${{ runner.arch }}-${{ inputs.name }}-${{ github.run_id }}-${{ github.run_attempt }}
+        restore-keys: vcpkg-bin-${{ runner.os }}-${{ runner.arch }}-${{ inputs.name }}-
+    # vcpkg-cache-save compares against this to tell whether the run built any package.
+    - shell: bash
+      run: touch "$(cygpath -m "$RUNNER_TEMP" 2>/dev/null || echo "$RUNNER_TEMP")/vcpkg-bincache/.restored"

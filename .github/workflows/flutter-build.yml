@@ -63,9 +63,10 @@ env:
   SIGN_BASE_URL: "${{ secrets.SIGN_BASE_URL }}-2"
 
 # Builds that publish (upload-artifact: nightly and tags) neither restore nor save a cache: the
-# rust-cache, run-vcpkg, run-on-arch image and bridge caches are skipped there, and so is exporting
+# vcpkg binary, run-vcpkg, run-on-arch image and bridge caches are skipped there, and so is exporting
 # the cache token to the build steps. Other workflow runs can write those caches, so a published
-# binary must not be built from one. CI runs keep them.
+# binary must not be built from one. CI runs keep them. There is no rust-cache here: its ~2 GB
+# entries never hit within the repository's 10 GB cache limit and evicted everything else.
 jobs:
   validate-update-metadata-keys:
     runs-on: ubuntu-22.04
@@ -300,11 +301,6 @@ jobs:
           targets: ${{ matrix.job.target }}
           components: "rustfmt"
 
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
-        if: ${{ !inputs.upload-artifact }}
-        with:
-          prefix-key: ${{ matrix.job.os }}
-
       - name: Setup vcpkg with Github Actions binary cache
         uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
         with:
@@ -312,8 +308,16 @@ jobs:
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
           doNotCache: ${{ inputs.upload-artifact }}
 
+      - name: Restore vcpkg binary cache
+        id: vcpkg-cache
+        if: ${{ !inputs.upload-artifact }}
+        uses: ./.github/actions/vcpkg-cache-restore
+        with:
+          name: ${{ matrix.job.target }}
+
       - name: Install vcpkg dependencies
         env:
+          VCPKG_BINARY_SOURCES: ${{ steps.vcpkg-cache.outputs.binary-sources || 'clear' }}
           VCPKG_DEFAULT_HOST_TRIPLET: ${{ matrix.job.vcpkg-triplet }}
         run: |
           if ! $VCPKG_ROOT/vcpkg \
@@ -331,6 +335,12 @@ jobs:
           fi
           head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-${{ matrix.job.vcpkg-triplet }}-rel-out.log" || true
         shell: bash
+
+      - name: Save vcpkg binary cache
+        if: ${{ !inputs.upload-artifact && github.ref == 'refs/heads/master' }}
+        uses: ./.github/actions/vcpkg-cache-save
+        with:
+          name: ${{ matrix.job.target }}
 
       - name: Set SODIUM_LIB_DIR (arm64)
         # libsodium-sys ships no arm64 Windows prebuilt lib; point it at the vcpkg-built one
@@ -642,11 +652,6 @@ jobs:
             --profile minimal --no-self-update --force-non-host
           rustup default nightly-2023-10-13-${{ matrix.job.target }} --force-non-host
 
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
-        if: ${{ !inputs.upload-artifact }}
-        with:
-          prefix-key: ${{ matrix.job.os }}-sciter
-
       - name: Setup vcpkg with Github Actions binary cache
         uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
         with:
@@ -654,8 +659,16 @@ jobs:
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
           doNotCache: ${{ inputs.upload-artifact }}
 
+      - name: Restore vcpkg binary cache
+        id: vcpkg-cache
+        if: ${{ !inputs.upload-artifact }}
+        uses: ./.github/actions/vcpkg-cache-restore
+        with:
+          name: ${{ matrix.job.target }}
+
       - name: Install vcpkg dependencies
         env:
+          VCPKG_BINARY_SOURCES: ${{ steps.vcpkg-cache.outputs.binary-sources || 'clear' }}
           VCPKG_DEFAULT_HOST_TRIPLET: ${{ matrix.job.vcpkg-triplet }}
         run: |
           if ! $VCPKG_ROOT/vcpkg \
@@ -673,6 +686,12 @@ jobs:
           fi
           head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-${{ matrix.job.vcpkg-triplet }}-rel-out.log" || true
         shell: bash
+
+      - name: Save vcpkg binary cache
+        if: ${{ !inputs.upload-artifact && github.ref == 'refs/heads/master' }}
+        uses: ./.github/actions/vcpkg-cache-save
+        with:
+          name: ${{ matrix.job.target }}
 
       - name: Build rustdesk
         id: build
@@ -853,7 +872,16 @@ jobs:
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
           doNotCache: ${{ inputs.upload-artifact }}
 
+      - name: Restore vcpkg binary cache
+        id: vcpkg-cache
+        if: ${{ !inputs.upload-artifact }}
+        uses: ./.github/actions/vcpkg-cache-restore
+        with:
+          name: ${{ matrix.job.target }}
+
       - name: Install vcpkg dependencies
+        env:
+          VCPKG_BINARY_SOURCES: ${{ steps.vcpkg-cache.outputs.binary-sources || 'clear' }}
         run: |
           if ! $VCPKG_ROOT/vcpkg \
             install \
@@ -871,18 +899,18 @@ jobs:
           head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-${{ matrix.job.vcpkg-triplet }}-rel-out.log" || true
         shell: bash
 
+      - name: Save vcpkg binary cache
+        if: ${{ !inputs.upload-artifact && github.ref == 'refs/heads/master' }}
+        uses: ./.github/actions/vcpkg-cache-save
+        with:
+          name: ${{ matrix.job.target }}
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
         with:
           toolchain: ${{ env.RUST_VERSION }}
           targets: ${{ matrix.job.target }}
           components: "rustfmt"
-
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
-        if: ${{ !inputs.upload-artifact }}
-        with:
-          prefix-key: rustdesk-lib-cache-ios
-          key: ${{ matrix.job.target }}
 
       - name: Restore bridge files
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -1065,11 +1093,6 @@ jobs:
           targets: ${{ matrix.job.target }}
           components: "rustfmt"
 
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
-        if: ${{ !inputs.upload-artifact }}
-        with:
-          prefix-key: ${{ matrix.job.os }}
-
       - name: Restore bridge files
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -1089,7 +1112,16 @@ jobs:
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
           doNotCache: ${{ inputs.upload-artifact }}
 
+      - name: Restore vcpkg binary cache
+        id: vcpkg-cache
+        if: ${{ !inputs.upload-artifact }}
+        uses: ./.github/actions/vcpkg-cache-restore
+        with:
+          name: ${{ matrix.job.target }}
+
       - name: Install vcpkg dependencies
+        env:
+          VCPKG_BINARY_SOURCES: ${{ steps.vcpkg-cache.outputs.binary-sources || 'clear' }}
         run: |
           if ! $VCPKG_ROOT/vcpkg \
             install \
@@ -1104,6 +1136,12 @@ jobs:
             exit 1
           fi
           head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-${{ matrix.job.vcpkg-triplet }}-rel-out.log" || true
+
+      - name: Save vcpkg binary cache
+        if: ${{ !inputs.upload-artifact && github.ref == 'refs/heads/master' }}
+        uses: ./.github/actions/vcpkg-cache-save
+        with:
+          name: ${{ matrix.job.target }}
 
       - name: Show version information (Rust, cargo, Clang)
         shell: bash
@@ -1567,7 +1605,16 @@ jobs:
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
           doNotCache: ${{ inputs.upload-artifact }}
 
+      - name: Restore vcpkg binary cache
+        id: vcpkg-cache
+        if: ${{ !inputs.upload-artifact }}
+        uses: ./.github/actions/vcpkg-cache-restore
+        with:
+          name: ${{ matrix.job.target }}
+
       - name: Install vcpkg dependencies
+        env:
+          VCPKG_BINARY_SOURCES: ${{ steps.vcpkg-cache.outputs.binary-sources || 'clear' }}
         run: |
           case ${{ matrix.job.target }} in
             aarch64-linux-android)
@@ -1595,6 +1642,12 @@ jobs:
           fi
         shell: bash
 
+      - name: Save vcpkg binary cache
+        if: ${{ !inputs.upload-artifact && github.ref == 'refs/heads/master' }}
+        uses: ./.github/actions/vcpkg-cache-save
+        with:
+          name: ${{ matrix.job.target }}
+
       - name: Restore bridge files
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -1606,12 +1659,6 @@ jobs:
         with:
           toolchain: ${{ env.RUST_VERSION }}
           components: "rustfmt"
-
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
-        if: ${{ !inputs.upload-artifact }}
-        with:
-          prefix-key: rustdesk-lib-cache-android # TODO: drop '-android' part after caches are invalidated
-          key: ${{ matrix.job.target }}
 
       - name: Build rustdesk lib
         env:
@@ -2036,8 +2083,17 @@ jobs:
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
           doNotCache: ${{ inputs.upload-artifact }}
 
+      - name: Restore vcpkg binary cache
+        id: vcpkg-cache
+        if: ${{ !inputs.upload-artifact && (matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true') }}
+        uses: ./.github/actions/vcpkg-cache-restore
+        with:
+          name: ${{ matrix.job.target }}
+
       - name: Install vcpkg dependencies
         if: matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true'
+        env:
+          VCPKG_BINARY_SOURCES: ${{ steps.vcpkg-cache.outputs.binary-sources || 'clear' }}
         run: |
           sudo apt install -y libva-dev && apt show libva-dev
           if ! $VCPKG_ROOT/vcpkg \
@@ -2055,6 +2111,12 @@ jobs:
           fi
           head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-${{ matrix.job.vcpkg-triplet }}-rel-out.log" || true
         shell: bash
+
+      - name: Save vcpkg binary cache
+        if: ${{ !inputs.upload-artifact && github.ref == 'refs/heads/master' && (matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true') }}
+        uses: ./.github/actions/vcpkg-cache-save
+        with:
+          name: ${{ matrix.job.target }}
 
       - name: Restore bridge files
         if: matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true'
