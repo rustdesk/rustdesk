@@ -1563,7 +1563,11 @@ fn parse_simple_header(header: &str) -> Vec<HeaderEntry> {
 }
 
 /// POST request via TCP proxy.
-async fn post_request_via_tcp_proxy(url: &str, body: &str, header: &str) -> ResultType<String> {
+pub(crate) async fn post_request_via_tcp_proxy(
+    url: &str,
+    body: &str,
+    header: &str,
+) -> ResultType<String> {
     let headers = parse_simple_header(header);
     let resp = tcp_proxy_request("POST", url, body.as_bytes(), headers).await?;
     if !resp.error.is_empty() {
@@ -1632,7 +1636,7 @@ async fn post_request_http(url: &str, body: &str, header: &str) -> ResultType<(u
 
 /// Try `http_fn` first; on connection failure or 5xx, fall back to `tcp_fn`
 /// if the URL is eligible. 4xx responses are returned as-is.
-async fn with_tcp_proxy_fallback<HttpFut, TcpFut>(
+pub(crate) async fn with_tcp_proxy_fallback<HttpFut, TcpFut>(
     url: &str,
     method: &str,
     http_fn: HttpFut,
