@@ -226,6 +226,18 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     x == 0
 }
 
+async fn wait_for_peer_close(stream: &mut Stream, is_kcp: bool) {
+    if is_kcp || matches!(stream, Stream::WebRTC(_)) {
+        // The controller closes after reading CloseReason. Closing our side first can
+        // discard the queued reason and make the controller reconnect.
+        // This wait timed out in all six KCP tests.
+        let _ = time::timeout(Duration::from_secs(1), async {
+            while let Some(Ok(_)) = stream.next().await {}
+        })
+        .await;
+    }
+}
+
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn should_use_terminal_os_login_scope(is_terminal: bool, os_login_username: &str) -> bool {
     cfg!(target_os = "windows") && is_terminal && !os_login_username.trim().is_empty()
@@ -355,10 +367,10 @@ impl TerminalUserToken {
         }
     }
 }
-pub struct Connection {
+pub struct Connection<'a> {
     inner: ConnInner,
     display_idx: usize,
-    stream: super::Stream,
+    stream: &'a mut Stream,
     server: super::ServerPtrWeak,
     hash: Hash,
     read_jobs: Vec<fs::TransferJob>,
@@ -436,6 +448,7 @@ pub struct Connection {
     #[cfg(not(any(target_os = "ios")))]
     pressed_modifiers: HashSet<rdev::Key>,
     closed: bool,
+    sent_close_reason: bool,
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     start_cm_ipc_para: Option<StartCmIpcPara>,
     auto_disconnect_timer: Option<(Instant, u64)>,
@@ -529,18 +542,36 @@ fn drm_can_serve_login_screen() -> bool {
     false
 }
 
-impl Connection {
+impl Connection<'_> {
     pub async fn start(
         addr: SocketAddr,
-        stream: super::Stream,
+        mut stream: super::Stream,
         id: i32,
         server: super::ServerPtrWeak,
         meta: super::ConnectionMeta,
         unauthorized: UnauthorizedID,
     ) {
+        let is_kcp = meta.is_kcp;
+        let sent_close_reason =
+            Self::_start(addr, &mut stream, id, server, meta, unauthorized).await;
+        if sent_close_reason {
+            // Only the transport is needed here. Session cleanup must not wait for the peer.
+            wait_for_peer_close(&mut stream, is_kcp).await;
+        }
+    }
+
+    async fn _start(
+        addr: SocketAddr,
+        stream: &mut Stream,
+        id: i32,
+        server: super::ServerPtrWeak,
+        meta: super::ConnectionMeta,
+        unauthorized: UnauthorizedID,
+    ) -> bool {
         let super::ConnectionMeta {
             control_permissions,
             controlled_context,
+            ..
         } = meta;
         // Android is not supported yet, so we always set control_permissions to None.
         #[cfg(target_os = "android")]
@@ -570,7 +601,7 @@ impl Connection {
 
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let tx_cloned = tx.clone();
-        let mut conn = Self {
+        let mut conn = Connection {
             inner: ConnInner {
                 id,
                 tx: Some(tx),
@@ -645,6 +676,7 @@ impl Connection {
             #[cfg(not(any(target_os = "ios")))]
             pressed_modifiers: Default::default(),
             closed: false,
+            sent_close_reason: false,
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             start_cm_ipc_para: Some(StartCmIpcPara {
                 rx_to_cm,
@@ -676,7 +708,7 @@ impl Connection {
             conn.closed = true;
             // sleep to ensure msg got received.
             sleep(1.).await;
-            return;
+            return false;
         }
         #[cfg(target_os = "android")]
         start_channel(rx_to_cm, tx_from_cm);
@@ -1073,7 +1105,7 @@ impl Connection {
                 _ = conn.file_timer.tick() => {
                     if !conn.read_jobs.is_empty() {
                         conn.send_to_cm(ipc::Data::FileTransferLog(("transfer".to_string(), fs::serialize_transfer_jobs(&conn.read_jobs))));
-                        match fs::handle_read_jobs(&mut conn.read_jobs, &mut conn.stream).await {
+                        match fs::handle_read_jobs(&mut conn.read_jobs, conn.stream).await {
                             Ok(log) => {
                                 if !log.is_empty() {
                                     conn.send_to_cm(ipc::Data::FileTransferLog(("transfer".to_string(), log)));
@@ -1282,6 +1314,7 @@ impl Connection {
         }
         conn.on_close("End", true).await;
         log::info!("#{} connection loop exited", id);
+        conn.sent_close_reason
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -1839,7 +1872,7 @@ impl Connection {
             return true;
         };
         if pf.multiplex {
-            crate::port_forward_mux::cap_packet_size(&mut self.stream);
+            crate::port_forward_mux::cap_packet_size(self.stream);
             // `inner.tx` is set for the connection's whole life; `None` here is
             // unreachable, and refusing the login is the only honest answer.
             self.port_forward_mux = self.inner.tx.clone().map(|tx| {
@@ -5494,7 +5527,10 @@ impl Connection {
         }
         let mut msg_out = Message::new();
         msg_out.set_misc(misc);
-        self.send(msg_out).await;
+        match self.stream.send(&msg_out).await {
+            Ok(()) => self.sent_close_reason = true,
+            Err(err) => log::debug!("Failed to send CloseReason: {err}"),
+        }
         raii::AuthedConnID::check_remove_session(self.inner.id(), self.session_key());
     }
 
@@ -6903,7 +6939,7 @@ impl Default for PortableState {
     }
 }
 
-impl Drop for Connection {
+impl Drop for Connection<'_> {
     fn drop(&mut self) {
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         self.release_pressed_modifiers();
@@ -7377,6 +7413,59 @@ mod test {
 
     fn unauthorized_count() -> usize {
         UNAUTHORIZED_CONNS.lock().unwrap().len()
+    }
+
+    #[tokio::test]
+    async fn webrtc_controller_receives_manual_disconnect_reason() {
+        use hbb_common::webrtc::WebRTCStream;
+
+        let (mut controller, mut controlled) = timeout(30_000, async {
+            let offerer = WebRTCStream::new("", false, 5000).await.unwrap();
+            let offer = offerer.get_local_endpoint().await.unwrap();
+            let answerer = WebRTCStream::new(&offer, false, 5000).await.unwrap();
+            let answer = answerer.get_local_endpoint().await.unwrap();
+            offerer.set_remote_endpoint(&answer).await.unwrap();
+            (Stream::WebRTC(offerer), Stream::WebRTC(answerer))
+        })
+        .await
+        .expect("WebRTC setup timed out");
+
+        let reason = "Closed manually by the peer";
+        let message = misc_msg(|m| m.set_close_reason(reason.into()));
+        let ping = msg(|m| m.set_test_delay(TestDelay::new()));
+        controller.send(&ping).await.unwrap();
+        controlled.send(&message).await.unwrap();
+        let reader = tokio::spawn(async move {
+            time::sleep(Duration::from_millis(100)).await;
+            let frame = controller.next_timeout(3000).await.expect("close reason");
+            Message::parse_from_bytes(&frame.unwrap()).unwrap()
+        });
+        wait_for_peer_close(&mut controlled, false).await;
+        drop(controlled);
+        assert_eq!(reader.await.unwrap().misc().close_reason(), reason);
+    }
+
+    #[tokio::test]
+    async fn kcp_controller_receives_manual_disconnect_reason() {
+        let ((_controller_guard, mut controller), (controlled_guard, mut controlled)) =
+            crate::kcp_stream::tests::establish().await;
+        let reason = "Closed manually by the peer";
+        let sender = tokio::spawn(async move {
+            let message = misc_msg(|m| m.set_close_reason(reason.into()));
+            controlled.send(&message).await.unwrap();
+            wait_for_peer_close(&mut controlled, true).await;
+            drop(controlled);
+            drop(controlled_guard);
+        });
+        let frame = controller
+            .next_timeout(3000)
+            .await
+            .expect("close reason")
+            .unwrap();
+        let message = Message::parse_from_bytes(&frame).unwrap();
+        assert_eq!(message.misc().close_reason(), reason);
+        drop(controller);
+        sender.await.unwrap();
     }
 
     #[test]

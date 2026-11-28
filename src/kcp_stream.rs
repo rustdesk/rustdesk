@@ -193,7 +193,7 @@ impl Drop for KcpStream {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use std::time::Duration;
 
@@ -205,7 +205,7 @@ mod tests {
         (Arc::new(a), Arc::new(b))
     }
 
-    async fn establish() -> ((KcpStream, Stream), (KcpStream, Stream)) {
+    pub(crate) async fn establish() -> ((KcpStream, Stream), (KcpStream, Stream)) {
         let (a, b) = connected_pair().await;
         let (accept_res, connect_res) = tokio::join!(
             KcpStream::accept(b, Duration::from_secs(5), None),

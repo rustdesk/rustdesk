@@ -48,6 +48,7 @@ fn connection_meta(
     ConnectionMeta {
         control_permissions,
         controlled_context,
+        ..Default::default()
     }
 }
 
@@ -1533,7 +1534,7 @@ async fn udp_nat_listen(
     peer_addr: SocketAddr,
     peer_addr_v4: SocketAddr,
     server: ServerPtr,
-    meta: ConnectionMeta,
+    mut meta: ConnectionMeta,
     slot: PunchSlot,
 ) -> ResultType<()> {
     let tm = Instant::now();
@@ -1550,6 +1551,7 @@ async fn udp_nat_listen(
         // The KCP session is up: from here it is a connection like any other and the connection
         // layer's own limits apply to it, so the place goes back for the next punch.
         drop(slot);
+        meta.is_kcp = true;
         crate::server::create_tcp_connection(server, stream.1, peer_addr_v4, true, meta).await?;
         Ok(())
     };
