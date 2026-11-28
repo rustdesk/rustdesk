@@ -830,5 +830,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "Nimmt den Bildschirm über den RustDesk-Dienst direkt von der Grafikkarte auf, ohne die Wayland-Abfrage zur Bildschirmfreigabe, auch auf dem Anmeldebildschirm. Funktioniert möglicherweise nicht auf jedem Gerät. Wenn Verbindungen weiterhin eine Bildschirmfreigabe verlangen, deaktivieren Sie dies oder verwenden Sie X11. Eine Änderung trennt die aktuellen Sitzungen."),
         ("wayland-drm-tip", "Für unbeaufsichtigten Zugriff unter Wayland DRM-Bildschirmaufnahme versuchen, sonst X11 verwenden."),
         ("login-wayland-drm-tip", "Für den Wayland-Anmeldebildschirm DRM-Bildschirmaufnahme versuchen oder auf X11 umstellen."),
+        ("App lock", "App-Sperre"),
+        ("app-lock-tip", "Fingerabdruck, Gesicht oder Bildschirmsperre zum Öffnen der App verlangen."),
+        ("app-lock-no-screen-lock-tip", "Richten Sie zuerst eine Bildschirmsperre auf diesem Gerät ein."),
+        ("Lock after leaving the app", "Nach Verlassen der App sperren"),
+        ("Immediately", "Sofort"),
+        ("After 1 minute", "Nach 1 Minute"),
+        ("After 5 minutes", "Nach 5 Minuten"),
+        ("Unlock", "Entsperren"),
     ].iter().cloned().collect();
 }

@@ -830,5 +830,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "A RustDesk szolgáltatáson keresztül közvetlenül a videokártyáról rögzíti a képernyőt, a Wayland képernyőmegosztási kérése nélkül, a bejelentkezési képernyőn is. Nem biztos, hogy minden eszközön működik; ha a kapcsolatok továbbra is képernyőmegosztást kérnek, kapcsolja ki ezt, vagy használja az X11-et. A módosítás bontja az aktuális munkameneteket."),
         ("wayland-drm-tip", "Felügyelet nélküli hozzáféréshez Waylanden próbálja ki a DRM-képernyőrögzítést, vagy használja az X11-et."),
         ("login-wayland-drm-tip", "A Wayland bejelentkezési képernyőjéhez próbálja ki a DRM-képernyőrögzítést, vagy váltson X11-re."),
+        ("App lock", "Alkalmazászár"),
+        ("app-lock-tip", "Ujjlenyomat, arc vagy képernyőzár megkövetelése az alkalmazás megnyitásához."),
+        ("app-lock-no-screen-lock-tip", "Először állítson be képernyőzárat ezen az eszközön."),
+        ("Lock after leaving the app", "Zárolás az alkalmazás elhagyása után"),
+        ("Immediately", "Azonnal"),
+        ("After 1 minute", "1 perc után"),
+        ("After 5 minutes", "5 perc után"),
+        ("Unlock", "Feloldás"),
     ].iter().cloned().collect();
 }

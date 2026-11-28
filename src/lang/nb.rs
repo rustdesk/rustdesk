@@ -830,5 +830,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "Tar opp skjermen direkte fra grafikkortet via RustDesk-tjenesten, uten Waylands forespørsel om skjermdeling, også på påloggingsskjermen. Fungerer kanskje ikke på alle enheter; hvis tilkoblinger fortsatt ber om skjermdeling, slå dette av eller bruk X11. Endring kobler fra gjeldende økter."),
         ("wayland-drm-tip", "Prøv DRM-skjermopptak for uovervåket tilgang på Wayland, eller bruk X11 hvis det ikke virker."),
         ("login-wayland-drm-tip", "Prøv DRM-skjermopptak for å nå Waylands påloggingsskjerm, eller bytt den til X11."),
+        ("App lock", "Applås"),
+        ("app-lock-tip", "Krev fingeravtrykk, ansikt eller skjermlås for å åpne appen."),
+        ("app-lock-no-screen-lock-tip", "Konfigurer først en skjermlås på denne enheten."),
+        ("Lock after leaving the app", "Lås etter at appen forlates"),
+        ("Immediately", "Umiddelbart"),
+        ("After 1 minute", "Etter 1 minutt"),
+        ("After 5 minutes", "Etter 5 minutter"),
+        ("Unlock", "Lås opp"),
     ].iter().cloned().collect();
 }

@@ -830,5 +830,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "Kaappaa näytön suoraan näytönohjaimelta RustDesk-palvelun kautta ilman Waylandin näytön jakamisen kehotetta, myös kirjautumisnäytössä. Ei välttämättä toimi kaikilla laitteilla; jos yhteydet pyytävät yhä näytön jakamista, poista tämä käytöstä tai käytä X11:tä. Muutos katkaisee nykyiset istunnot."),
         ("wayland-drm-tip", "Kokeile valvomattomaan käyttöön Waylandissa DRM-näytönkaappausta, tai käytä X11:tä, jos se ei toimi."),
         ("login-wayland-drm-tip", "Kokeile Waylandin kirjautumisnäyttöön DRM-näytönkaappausta tai vaihda se X11:een."),
+        ("App lock", "Sovelluksen lukitus"),
+        ("app-lock-tip", "Vaadi sormenjälki, kasvot tai näytön lukitus sovelluksen avaamiseen."),
+        ("app-lock-no-screen-lock-tip", "Ota ensin näytön lukitus käyttöön tässä laitteessa."),
+        ("Lock after leaving the app", "Lukitse sovelluksesta poistumisen jälkeen"),
+        ("Immediately", "Välittömästi"),
+        ("After 1 minute", "1 minuutin kuluttua"),
+        ("After 5 minutes", "5 minuutin kuluttua"),
+        ("Unlock", "Avaa lukitus"),
     ].iter().cloned().collect();
 }

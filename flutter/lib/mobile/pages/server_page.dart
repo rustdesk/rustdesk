@@ -14,6 +14,7 @@ import '../../consts.dart';
 import '../../models/platform_model.dart';
 import '../../models/server_model.dart';
 import '../../utils/android_documents.dart';
+import '../widgets/app_lock.dart';
 import 'home_page.dart';
 
 class ServerPage extends StatefulWidget implements PageShape {
@@ -973,6 +974,11 @@ void androidChannelInit() {
         case "on_media_projection_canceled":
           {
             gFFI.serverModel.stopService();
+            break;
+          }
+        case "on_app_lock_idle":
+          {
+            appLock.onIdle(arguments as int);
             break;
           }
         case "msgbox":

@@ -830,5 +830,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "Snima ekran direktno sa grafičke kartice preko RustDesk servisa, bez Wayland upita za deljenje ekrana, uključujući ekran za prijavu. Možda neće raditi na svakom uređaju; ako veze i dalje traže deljenje ekrana, isključite ovo ili koristite X11. Promena prekida trenutne sesije."),
         ("wayland-drm-tip", "Za pristup bez nadzora na Waylandu probajte DRM snimanje ekrana ili koristite X11 ako ne radi."),
         ("login-wayland-drm-tip", "Za pristup Wayland ekranu za prijavu probajte DRM snimanje ekrana ili ga prebacite na X11."),
+        ("App lock", "Zaključavanje aplikacije"),
+        ("app-lock-tip", "Zahtevaj otisak prsta, lice ili zaključavanje ekrana za otvaranje aplikacije."),
+        ("app-lock-no-screen-lock-tip", "Prvo podesite zaključavanje ekrana na ovom uređaju."),
+        ("Lock after leaving the app", "Zaključaj nakon napuštanja aplikacije"),
+        ("Immediately", "Odmah"),
+        ("After 1 minute", "Posle 1 minuta"),
+        ("After 5 minutes", "Posle 5 minuta"),
+        ("Unlock", "Otključaj"),
     ].iter().cloned().collect();
 }

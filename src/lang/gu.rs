@@ -830,5 +830,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "RustDesk સેવા દ્વારા સીધા ગ્રાફિક્સ કાર્ડમાંથી સ્ક્રીન કેપ્ચર કરે છે, Wayland ની સ્ક્રીન શેરિંગ પુષ્ટિ વિના, લોગિન સ્ક્રીન પર પણ. દરેક ઉપકરણ પર કામ ન પણ કરે; જો કનેક્શન હજુ પણ સ્ક્રીન શેર કરવાનું કહે, તો આ બંધ કરો અથવા X11 નો ઉપયોગ કરો. આ બદલવાથી વર્તમાન સત્રો ડિસ્કનેક્ટ થાય છે."),
         ("wayland-drm-tip", "Wayland પર અનટેન્ડેડ ઍક્સેસ માટે DRM સ્ક્રીન કેપ્ચર અજમાવો, કામ ન કરે તો X11 નો ઉપયોગ કરો."),
         ("login-wayland-drm-tip", "Wayland લોગિન સ્ક્રીન ઍક્સેસ કરવા DRM સ્ક્રીન કેપ્ચર અજમાવો અથવા તેને X11 પર બદલો."),
+        ("App lock", ""),
+        ("app-lock-tip", ""),
+        ("app-lock-no-screen-lock-tip", ""),
+        ("Lock after leaving the app", ""),
+        ("Immediately", ""),
+        ("After 1 minute", ""),
+        ("After 5 minutes", ""),
+        ("Unlock", ""),
     ].iter().cloned().collect();
 }

@@ -830,5 +830,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "Hõivab ekraani RustDeski teenuse kaudu otse graafikakaardilt, ilma Waylandi ekraani jagamise päringuta, ka sisselogimisekraanil. Ei pruugi töötada igas seadmes; kui ühendused küsivad endiselt ekraani jagamist, lülita see välja või kasuta X11. Muutmine katkestab praegused seansid."),
         ("wayland-drm-tip", "Järelvalveta juurdepääsuks Waylandis proovi DRM-ekraanihõivet või kasuta X11, kui see ei tööta."),
         ("login-wayland-drm-tip", "Waylandi sisselogimisekraanile juurdepääsuks proovi DRM-ekraanihõivet või lülita see X11 peale."),
+        ("App lock", "Rakenduse lukk"),
+        ("app-lock-tip", "Nõua rakenduse avamiseks sõrmejälge, nägu või ekraanilukku."),
+        ("app-lock-no-screen-lock-tip", "Seadista esmalt selles seadmes ekraanilukk."),
+        ("Lock after leaving the app", "Lukusta pärast rakendusest lahkumist"),
+        ("Immediately", "Kohe"),
+        ("After 1 minute", "1 minuti pärast"),
+        ("After 5 minutes", "5 minuti pärast"),
+        ("Unlock", "Lukusta lahti"),
     ].iter().cloned().collect();
 }

@@ -830,5 +830,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "Captura o ecrã diretamente da placa gráfica através do serviço do RustDesk, sem o pedido de partilha de ecrã do Wayland, incluindo no ecrã de início de sessão. Pode não funcionar em todos os dispositivos; se as ligações continuarem a pedir a partilha do ecrã, desative isto ou utilize o X11. Alterar isto desliga as sessões atuais."),
         ("wayland-drm-tip", "Para acesso não assistido no Wayland, experimente a captura de ecrã DRM ou utilize o X11 se não funcionar."),
         ("login-wayland-drm-tip", "Para aceder ao ecrã de início de sessão do Wayland, experimente a captura DRM ou mude-o para X11."),
+        ("App lock", "Bloqueio da aplicação"),
+        ("app-lock-tip", "Exigir impressão digital, rosto ou bloqueio de ecrã para abrir a aplicação."),
+        ("app-lock-no-screen-lock-tip", "Configure primeiro um bloqueio de ecrã neste dispositivo."),
+        ("Lock after leaving the app", "Bloquear após sair da aplicação"),
+        ("Immediately", "Imediatamente"),
+        ("After 1 minute", "Após 1 minuto"),
+        ("After 5 minutes", "Após 5 minutos"),
+        ("Unlock", "Desbloquear"),
     ].iter().cloned().collect();
 }

@@ -830,5 +830,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "ეკრანს RustDesk სერვისის მეშვეობით პირდაპირ ვიდეობარათიდან იღებს, Wayland-ის ეკრანის გაზიარების მოთხოვნის გარეშე, შესვლის ეკრანზეც. შეიძლება ყველა მოწყობილობაზე არ იმუშაოს; თუ კავშირები კვლავ ითხოვენ ეკრანის გაზიარებას, გამორთეთ ეს ან გამოიყენეთ X11. ცვლილება მიმდინარე სესიებს წყვეტს."),
         ("wayland-drm-tip", "Wayland-ზე ავტომატური წვდომისთვის სცადეთ DRM-ით ეკრანის გადაღება, ან გამოიყენეთ X11, თუ არ მუშაობს."),
         ("login-wayland-drm-tip", "Wayland-ის შესვლის ეკრანზე წვდომისთვის სცადეთ DRM-ით გადაღება ან გადართეთ X11-ზე."),
+        ("App lock", ""),
+        ("app-lock-tip", ""),
+        ("app-lock-no-screen-lock-tip", ""),
+        ("Lock after leaving the app", ""),
+        ("Immediately", ""),
+        ("After 1 minute", ""),
+        ("After 5 minutes", ""),
+        ("Unlock", ""),
     ].iter().cloned().collect();
 }
