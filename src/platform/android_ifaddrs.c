@@ -15,6 +15,7 @@
 #include <ifaddrs.h>
 #include <net/if.h>
 #include <netinet/in.h>
+#include <sys/ioctl.h>
 #include <sys/socket.h>
 
 #include <linux/netlink.h>
@@ -27,18 +28,6 @@
 
 typedef int (*rd_nl_cb)(struct nlmsghdr *nlh, void *ctx);
 
-struct rd_link_info {
-    unsigned int index;
-    unsigned int flags;
-    char name[IFNAMSIZ + 1];
-};
-
-struct rd_link_table {
-    struct rd_link_info *items;
-    size_t len;
-    size_t cap;
-};
-
 /* One allocation per reported address; `ifa` first so freeifaddrs() can free
  * the node it is handed. */
 struct rd_ifaddrs_storage {
@@ -50,7 +39,7 @@ struct rd_ifaddrs_storage {
 };
 
 struct rd_addr_ctx {
-    const struct rd_link_table *links;
+    int ioctl_fd;
     struct ifaddrs *head;
     struct ifaddrs *tail;
 };
@@ -185,63 +174,6 @@ out:
     return rc;
 }
 
-static int rd_link_cb(struct nlmsghdr *nlh, void *ctx)
-{
-    struct rd_link_table *t = (struct rd_link_table *)ctx;
-    struct ifinfomsg *ifi;
-    struct rtattr *tb[IFLA_IFNAME + 1];
-    struct rd_link_info *slot;
-    int payload;
-    int namelen;
-
-    if (nlh->nlmsg_len < NLMSG_LENGTH(sizeof(*ifi)))
-        return 0;
-    ifi = (struct ifinfomsg *)NLMSG_DATA(nlh);
-    payload = (int)nlh->nlmsg_len - (int)NLMSG_SPACE(sizeof(*ifi));
-    if (payload < 0)
-        payload = 0;
-    rd_parse_rtattr(IFLA_RTA(ifi), payload, tb, IFLA_IFNAME);
-
-    /* An interface we cannot name is of no use: callers dereference ifa_name. */
-    if (tb[IFLA_IFNAME] == NULL || (int)RTA_PAYLOAD(tb[IFLA_IFNAME]) <= 0)
-        return 0;
-
-    if (t->len == t->cap) {
-        size_t ncap = t->cap ? t->cap * 2 : 16;
-        struct rd_link_info *items =
-            (struct rd_link_info *)realloc(t->items, ncap * sizeof(*items));
-        if (items == NULL) {
-            errno = ENOMEM;
-            return -1;
-        }
-        t->items = items;
-        t->cap = ncap;
-    }
-
-    slot = &t->items[t->len];
-    memset(slot, 0, sizeof(*slot));
-    slot->index = (unsigned int)ifi->ifi_index;
-    slot->flags = ifi->ifi_flags;
-    namelen = (int)RTA_PAYLOAD(tb[IFLA_IFNAME]);
-    if (namelen > IFNAMSIZ)
-        namelen = IFNAMSIZ;
-    memcpy(slot->name, RTA_DATA(tb[IFLA_IFNAME]), (size_t)namelen);
-    slot->name[namelen] = '\0';
-    t->len++;
-    return 0;
-}
-
-static const struct rd_link_info *rd_link_find(const struct rd_link_table *t,
-                                               unsigned int index)
-{
-    size_t i;
-    for (i = 0; i < t->len; i++) {
-        if (t->items[i].index == index)
-            return &t->items[i];
-    }
-    return NULL;
-}
-
 static void rd_fill_mask(unsigned char *out, int len, unsigned int prefix)
 {
     int i;
@@ -273,7 +205,8 @@ static int rd_addr_cb(struct nlmsghdr *nlh, void *ctx)
     struct ifaddrmsg *ifa;
     struct rtattr *tb[IFA_BROADCAST + 1];
     struct rtattr *ra;
-    const struct rd_link_info *link;
+    struct ifreq ifr;
+    unsigned int flags = 0;
     struct rd_ifaddrs_storage *st;
     int payload;
 
@@ -283,22 +216,24 @@ static int rd_addr_cb(struct nlmsghdr *nlh, void *ctx)
     if (ifa->ifa_family != AF_INET && ifa->ifa_family != AF_INET6)
         return 0;
 
-    /* Without the link entry there is no name, and callers deref ifa_name. */
-    link = rd_link_find(c->links, ifa->ifa_index);
-    if (link == NULL)
+    /* Android 11+ refuses RTM_GETLINK to apps (SELinux nlmsg_readpriv), so the
+     * name and flags come from ioctls, as in bionic's own getifaddrs(). An
+     * address we cannot name is dropped: callers deref ifa_name. ifr_flags is
+     * a signed short; the cast keeps IFF_DYNAMIC from sign-extending. */
+    memset(&ifr, 0, sizeof(ifr));
+    if (if_indextoname(ifa->ifa_index, ifr.ifr_name) == NULL)
         return 0;
+    if (ioctl(c->ioctl_fd, SIOCGIFFLAGS, &ifr) == 0)
+        flags = (unsigned short)ifr.ifr_flags;
 
     payload = (int)nlh->nlmsg_len - (int)NLMSG_SPACE(sizeof(*ifa));
     if (payload < 0)
         payload = 0;
     rd_parse_rtattr(IFA_RTA(ifa), payload, tb, IFA_BROADCAST);
 
-    /* On a point-to-point link IFA_ADDRESS holds the peer and IFA_LOCAL the
-     * local address; ipv6 only ever sets IFA_ADDRESS. */
-    if (ifa->ifa_family == AF_INET)
-        ra = tb[IFA_LOCAL] ? tb[IFA_LOCAL] : tb[IFA_ADDRESS];
-    else
-        ra = tb[IFA_ADDRESS] ? tb[IFA_ADDRESS] : tb[IFA_LOCAL];
+    /* For an address with a peer, IFA_ADDRESS holds the peer and IFA_LOCAL the
+     * local address, in ipv6 as in ipv4. */
+    ra = tb[IFA_LOCAL] ? tb[IFA_LOCAL] : tb[IFA_ADDRESS];
     if (ra == NULL)
         return 0;
     if ((int)RTA_PAYLOAD(ra) < (ifa->ifa_family == AF_INET ? 4 : 16))
@@ -310,9 +245,9 @@ static int rd_addr_cb(struct nlmsghdr *nlh, void *ctx)
         return -1;
     }
 
-    memcpy(st->name, link->name, sizeof(st->name));
+    memcpy(st->name, ifr.ifr_name, IFNAMSIZ);
     st->ifa.ifa_name = st->name;
-    st->ifa.ifa_flags = link->flags;
+    st->ifa.ifa_flags = flags;
     st->ifa.ifa_addr = (struct sockaddr *)&st->addr;
     st->ifa.ifa_netmask = (struct sockaddr *)&st->netmask;
 
@@ -323,7 +258,7 @@ static int rd_addr_cb(struct nlmsghdr *nlh, void *ctx)
         mask->sin_family = AF_INET;
         rd_fill_mask((unsigned char *)&mask->sin_addr, 4, ifa->ifa_prefixlen);
 
-        if ((link->flags & IFF_POINTOPOINT) && tb[IFA_ADDRESS] && tb[IFA_LOCAL] &&
+        if ((flags & IFF_POINTOPOINT) && tb[IFA_ADDRESS] && tb[IFA_LOCAL] &&
             (int)RTA_PAYLOAD(tb[IFA_ADDRESS]) >= 4 &&
             memcmp(RTA_DATA(tb[IFA_ADDRESS]), RTA_DATA(tb[IFA_LOCAL]), 4) != 0) {
             rd_set_in(&st->ifu, RTA_DATA(tb[IFA_ADDRESS]));
@@ -365,7 +300,6 @@ void freeifaddrs(struct ifaddrs *ifa)
 
 int getifaddrs(struct ifaddrs **ifap)
 {
-    struct rd_link_table links;
     struct rd_addr_ctx ctx;
     int fd;
     int saved;
@@ -376,28 +310,31 @@ int getifaddrs(struct ifaddrs **ifap)
     }
     *ifap = NULL;
 
-    memset(&links, 0, sizeof(links));
     memset(&ctx, 0, sizeof(ctx));
-    ctx.links = &links;
 
-    fd = socket(AF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, NETLINK_ROUTE);
-    if (fd < 0)
+    ctx.ioctl_fd = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
+    if (ctx.ioctl_fd < 0)
         return -1;
+    fd = socket(AF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, NETLINK_ROUTE);
+    if (fd < 0) {
+        saved = errno;
+        close(ctx.ioctl_fd);
+        errno = saved;
+        return -1;
+    }
 
-    if (rd_nl_dump(fd, RTM_GETLINK, RTM_NEWLINK, 1, rd_link_cb, &links) != 0)
-        goto fail;
     if (rd_nl_dump(fd, RTM_GETADDR, RTM_NEWADDR, 2, rd_addr_cb, &ctx) != 0)
         goto fail;
 
     close(fd);
-    free(links.items);
+    close(ctx.ioctl_fd);
     *ifap = ctx.head;
     return 0;
 
 fail:
     saved = errno;
     close(fd);
-    free(links.items);
+    close(ctx.ioctl_fd);
     freeifaddrs(ctx.head);
     errno = saved;
     return -1;
