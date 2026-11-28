@@ -1790,7 +1790,7 @@ copy /Y \"{tmp_path}\\{app_name} Tray.lnk\" \"%PROGRAMDATA%\\Microsoft\\Windows\
     let install_remote_printer = if install_printer {
         // No need to use `|| true` here.
         // The script will not exit even if `--install-remote-printer` panics.
-        format!("\"{}\" --install-remote-printer", &src_exe)
+        format!("\"{}\" --install-remote-printer", &exe)
     } else if is_win_10_or_greater() {
         format!("\"{}\" --uninstall-remote-printer", &src_exe)
     } else {
@@ -3555,6 +3555,15 @@ pub fn update_me(debug: bool) -> ResultType<()> {
     let is_msi = is_msi_installed().ok();
     let reg_msi_key = get_reg_msi_key(&subkey, is_msi)?;
 
+    // No need to check the install option here, `is_rd_printer_installed` rarely fails.
+    let is_printer_installed = remote_printer::is_rd_printer_installed(&app_name).unwrap_or(false);
+    // Do nothing if the printer is not installed or failed to query if the printer is installed.
+    let install_printer_cmd = crate::remote_print::legacy::update_command(
+        &exe,
+        is_printer_installed,
+        crate::remote_print::legacy::installed,
+    )?;
+
     let app_exe_name = &format!("{}.exe", &app_name);
     // NOTE: The pids below are matched by command line, which can silently come
     // back empty even while the processes are running:
@@ -3666,18 +3675,6 @@ reg add {subkey} /f /v EstimatedSize /t REG_DWORD /d {size}
         "".to_owned()
     };
 
-    // No need to check the install option here, `is_rd_printer_installed` rarely fails.
-    let is_printer_installed = remote_printer::is_rd_printer_installed(&app_name).unwrap_or(false);
-    // Do nothing if the printer is not installed or failed to query if the printer is installed.
-    let (uninstall_printer_cmd, install_printer_cmd) = if is_printer_installed {
-        (
-            format!("\"{}\" --uninstall-remote-printer", &src_exe),
-            format!("\"{}\" --install-remote-printer", &src_exe),
-        )
-    } else {
-        ("".to_owned(), "".to_owned())
-    };
-
     // We do not try to remove all files in the old version.
     // Because I don't know whether additional files will be installed here after installation, such as drivers.
     // Just copy files to the installation directory works fine.
@@ -3700,7 +3697,6 @@ taskkill /F /IM {app_name}.exe{filter}
 {rename_exe}
 {remove_meta_toml}
 {restore_service_cmd}
-{uninstall_printer_cmd}
 {install_printer_cmd}
 {sleep}
     ",

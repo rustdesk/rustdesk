@@ -86,6 +86,7 @@ message LoginRequest {
   string avatar = 17;
   bytes trusted_device_v2_token = 18;
   bool trusted_device_v2_supported = 19;
+  bool pdf_printing_supported = 20;
 }
 
 message Terminal {
@@ -474,6 +475,11 @@ message FileTransferSendRequest {
     Printer = 1;
   }
   FileType file_type = 5;
+  enum PrintFormat {
+    LegacyXps = 0;
+    Pdf = 1;
+  }
+  PrintFormat print_format = 6;
 }
 
 message FileTransferSendConfirmRequest {

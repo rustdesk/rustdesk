@@ -34,7 +34,8 @@
 
 		<InstallExecuteSequence>
 			<Custom Action="BlockSelfInstalledApp" After="AppSearch" Condition="NOT Installed AND (APP_WINDOWS_INSTALLER=&quot;#0&quot; OR APP_WINDOWS_INSTALLER32=&quot;#0&quot;)" />
-			<InstallExecute After="RemoveExistingProducts" />
+			<!-- Register printer recovery before removing the old product, so rollback restores its files first. -->
+			<InstallExecute After="StopUpgradePrinterService" />
 
 			<!--Only do InstallValidate if is not Uninstall-->
 			<!--<InstallValidate Condition="NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE )" />-->
@@ -43,7 +44,7 @@
 
 		</InstallExecuteSequence>
 
-		<MajorUpgrade DowngradeErrorMessage="!(loc.DowngradeError)" Schedule="afterInstallInitialize" AllowSameVersionUpgrades="yes" />
+		<MajorUpgrade DowngradeErrorMessage="!(loc.DowngradeError)" Schedule="afterInstallExecute" AllowSameVersionUpgrades="yes" />
 
 		<Feature Id="App" Level="1" AllowAdvertise="no" Display="expand" Title="!(loc.F_App)" Description="!(loc.F_App_Desc)" AllowAbsent="no">
 			<ComponentGroupRef Id="Components" />

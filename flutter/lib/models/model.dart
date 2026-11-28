@@ -549,13 +549,17 @@ class FfiModel with ChangeNotifier {
     }
   }
 
-  _handlePrinterRequest(
-      Map<String, dynamic> evt, SessionID sessionId, String peerId) {
+  Future<void> _handlePrinterRequest(
+      Map<String, dynamic> evt, SessionID sessionId, String peerId) async {
     final id = evt['id'];
     final path = evt['path'];
+    final pdf = path is String && path.startsWith('RustDesk://FsJob//PdfPrinter/');
+    final pdfPrinters = pdf ? await PdfPrinterList.load() : null;
+    if (pdf && parent.target?.closed != false) return;
     final dialogManager = parent.target!.dialogManager;
     dialogManager.show((setState, close, context) {
-      PrinterOptions printerOptions = PrinterOptions.load();
+      PrinterOptions printerOptions =
+          PrinterOptions.load(pdfPrinters: pdfPrinters);
       final saveSettings = mainGetLocalBoolOptionSync(kKeyPrinterSave).obs;
       final dontShowAgain = false.obs;
       final Rx<String> selectedPrinterName = printerOptions.printerName.obs;
@@ -571,7 +575,13 @@ class FfiModel with ChangeNotifier {
             value ?? kValuePrinterIncomingJobDefault;
       }
 
+      bool canSubmit() =>
+          !pdf ||
+          defaultOrSelectedGroupValue.value.isEmpty ||
+          printerNames.contains(selectedPrinterName.value);
+
       onSubmit() {
+        if (!canSubmit()) return;
         final printerName = defaultOrSelectedGroupValue.isEmpty
             ? ''
             : selectedPrinterName.value;
@@ -595,6 +605,7 @@ class FfiModel with ChangeNotifier {
               key: kKeyPrinterIncomingJobAction,
               value: kValuePrinterIncomingJobDismiss);
         }
+        if (pdf) bind.sessionCancelJob(sessionId: sessionId, actId: id);
         close();
       }
 
@@ -603,6 +614,9 @@ class FfiModel with ChangeNotifier {
           printerItemHeight * min(8.0, max(printerNames.length, 3.0));
       final content = Column(
         children: [
+          if (printerOptions.error.isNotEmpty)
+            Text(printerOptions.error,
+                style: TextStyle(color: Theme.of(context).colorScheme.error)),
           Text(translate('print-incoming-job-confirm-tip')),
           Row(
             children: [
@@ -712,7 +726,11 @@ class FfiModel with ChangeNotifier {
         title: Text(translate('Incoming Print Job')),
         content: content,
         actions: [
-          dialogButton('OK', onPressed: onSubmit),
+          if (pdf)
+            Obx(() => dialogButton('OK',
+                onPressed: canSubmit() ? onSubmit : null))
+          else
+            dialogButton('OK', onPressed: onSubmit),
           dialogButton('Cancel', onPressed: onCancel),
         ],
         onSubmit: onSubmit,

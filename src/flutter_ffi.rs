@@ -2753,7 +2753,26 @@ pub fn main_get_printer_names() -> SyncReturn<String> {
     return SyncReturn("".to_owned());
 }
 
+fn pdf_printer_names() -> String {
+    match crate::remote_print::receiver::printer_names() {
+        Ok(names) => serde_json::json!({"printers": names}).to_string(),
+        Err(error) => serde_json::json!({"error": format!("{error:#}")}).to_string(),
+    }
+}
+
 pub fn main_get_common(key: String) -> String {
+    if key == "pdf-printer-names" {
+        return pdf_printer_names();
+    }
+    #[cfg(windows)]
+    if key == "is-pdf-printer-installed" {
+        let ready = remote_printer::pdf::installed(&get_app_name())
+            .and_then(|queue| Ok(queue.is_some() || crate::remote_print::legacy::ready()?));
+        return match ready {
+            Ok(ready) => ready.to_string(),
+            Err(error) => format!("{error:#}"),
+        };
+    }
     if key == "is-printer-installed" {
         #[cfg(target_os = "windows")]
         {
@@ -2869,37 +2888,10 @@ fn verified_update_artifact_for_release_page_url(
 }
 
 pub fn main_set_common(_key: String, _value: String) {
-    #[cfg(target_os = "windows")]
-    if _key == "install-printer" && crate::platform::is_win_10_or_greater() {
-        std::thread::spawn(move || {
-            let (success, msg) = match remote_printer::install_update_printer(&get_app_name()) {
-                Ok(_) => (true, "".to_owned()),
-                Err(e) => {
-                    let err = e.to_string();
-                    log::error!("Failed to install/update rd printer: {}", &err);
-                    (false, err)
-                }
-            };
-            if success {
-                // Use `ipc` to notify the server process to update the install option in the registry.
-                // Because `install_update_printer()` may prompt for permissions, there is no need to prompt again here.
-                if let Err(e) = crate::ipc::set_install_option(
-                    crate::platform::REG_NAME_INSTALL_PRINTER.to_string(),
-                    "1".to_string(),
-                ) {
-                    log::error!("Failed to set install printer option: {}", e);
-                }
-            }
-            let data = HashMap::from([
-                ("name", serde_json::json!("install-printer-res")),
-                ("success", serde_json::json!(success)),
-                ("msg", serde_json::json!(msg)),
-            ]);
-            let _res = flutter::push_global_event(
-                flutter::APP_TYPE_MAIN,
-                serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
-            );
-        });
+    #[cfg(windows)]
+    if _key == "install-printer" {
+        crate::remote_print::setup::request_from_ui();
+        return;
     }
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     {

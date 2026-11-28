@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
@@ -6,13 +8,15 @@ class PrinterOptions {
   String action;
   List<String> printerNames;
   String printerName;
+  String error;
 
   PrinterOptions(
       {required this.action,
       required this.printerNames,
-      required this.printerName});
+      required this.printerName,
+      this.error = ''});
 
-  static PrinterOptions load() {
+  static PrinterOptions load({PdfPrinterList? pdfPrinters}) {
     var action = bind.mainGetLocalOption(key: kKeyPrinterIncomingJobAction);
     if (![
       kValuePrinterIncomingJobDismiss,
@@ -22,9 +26,9 @@ class PrinterOptions {
       action = kValuePrinterIncomingJobDefault;
     }
 
-    final printerNames = getPrinterNames();
+    final printerNames = pdfPrinters?.names ?? getPrinterNames();
     var selectedPrinterName = bind.mainGetLocalOption(key: kKeyPrinterSelected);
-    if (!printerNames.contains(selectedPrinterName)) {
+    if (pdfPrinters == null && !printerNames.contains(selectedPrinterName)) {
       if (action == kValuePrinterIncomingJobSelected) {
         action = kValuePrinterIncomingJobDefault;
         bind.mainSetLocalOption(
@@ -43,6 +47,27 @@ class PrinterOptions {
     return PrinterOptions(
         action: action,
         printerNames: printerNames,
-        printerName: selectedPrinterName);
+        printerName: selectedPrinterName,
+        error: pdfPrinters?.error ?? '');
+  }
+}
+
+class PdfPrinterList {
+  final List<String> names;
+  final String error;
+
+  const PdfPrinterList({this.names = const [], this.error = ''});
+
+  static Future<PdfPrinterList> load() async {
+    try {
+      final result =
+          jsonDecode(await bind.mainGetCommon(key: 'pdf-printer-names'))
+              as Map<String, dynamic>;
+      return PdfPrinterList(
+          names: List<String>.from(result['printers'] as List? ?? []),
+          error: result['error'] as String? ?? '');
+    } catch (error) {
+      return PdfPrinterList(error: error.toString());
+    }
   }
 }

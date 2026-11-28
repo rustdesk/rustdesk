@@ -504,6 +504,10 @@ pub enum Data {
     SecurityConfigError(String),
     #[cfg(all(target_os = "windows", feature = "flutter"))]
     PrinterData(Vec<u8>),
+    #[cfg(all(target_os = "windows", feature = "flutter"))]
+    PdfPrinterData(Vec<u8>),
+    #[cfg(all(target_os = "windows", feature = "flutter"))]
+    PdfPrinterError(String),
     InstallOption(Option<(String, String)>),
     #[cfg(all(
         feature = "flutter",

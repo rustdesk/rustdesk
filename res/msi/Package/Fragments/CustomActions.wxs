@@ -17,7 +17,23 @@
 		<CustomAction Id="SetPropertyServiceStop" DllEntry="SetPropertyFromConfig" Impersonate="yes" Execute="immediate" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
 		<CustomAction Id="AddRegSoftwareSASGeneration" DllEntry="AddRegSoftwareSASGeneration" Impersonate="no" Execute="deferred" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
 		<CustomAction Id="RemoveAmyuniIdd" DllEntry="RemoveAmyuniIdd" Impersonate="no" Execute="deferred" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
-		<CustomAction Id="InstallPrinter" DllEntry="InstallPrinter" Impersonate="no" Execute="deferred" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
-		<CustomAction Id="UninstallPrinter" DllEntry="UninstallPrinter" Impersonate="no" Execute="deferred" Return="ignore" BinaryRef="Custom_Actions_Dll"/>
+		<Property Id="PDFPRINTER_INSTALLED">
+			<RegistrySearch Id="PdfPrinterInstallMarker" Root="HKLM" Key="Software\$(var.Product)\RemotePrinting" Name="PDFPRINTER" Type="raw" />
+		</Property>
+		<CustomAction Id="CheckPdfPrinter" DllEntry="CheckPdfPrinter" Execute="immediate" Return="check" BinaryRef="Custom_Actions_Dll" />
+		<Property Id="RestoreUpgradePrinter" Hidden="yes" />
+		<!-- Keep the prior preference independent of this upgrade's INSTALLPRINTER choice. -->
+		<Property Id="PREVIOUSPRINTER" Secure="yes">
+			<RegistrySearch Id="PreviousPrinterInstallPreference" Root="HKCR" Key="$(var.RegKeyRoot)" Name="PRINTER" Type="raw" />
+		</Property>
+		<CustomAction Id="StopUpgradePrinterService" DllEntry="TryStopDeleteService" Impersonate="no" Execute="rollback" Return="check" BinaryRef="Custom_Actions_Dll" />
+		<CustomAction Id="ScheduleUpgradePrinterRecovery" DllEntry="ScheduleUpgradePrinterRecovery" Execute="immediate" Return="check" BinaryRef="Custom_Actions_Dll" />
+		<CustomAction Id="RestoreUpgradePrinter" DllEntry="RestoreUpgradePrinter" Impersonate="no" Execute="rollback" Return="check" HideTarget="yes" BinaryRef="Custom_Actions_Dll" />
+		<!-- The optional printer can be installed later from Settings if setup fails. -->
+		<CustomAction Id="InstallPrinter" FileRef="App.exe" ExeCommand="--install-remote-printer" Impersonate="no" Execute="deferred" Return="ignore" />
+		<CustomAction Id="RollbackPrinter" FileRef="App.exe" ExeCommand="--uninstall-remote-printer" Impersonate="no" Execute="rollback" Return="check" />
+		<!-- Printer cleanup failures stay logged and retryable; they must not roll back final app removal. -->
+		<CustomAction Id="UninstallPrinter" FileRef="App.exe" ExeCommand="--uninstall-remote-printer" Impersonate="no" Execute="deferred" Return="ignore" />
+		<CustomAction Id="DisablePrinter" FileRef="App.exe" ExeCommand="--disable-remote-printer" Impersonate="no" Execute="deferred" Return="check" />
 	</Fragment>
 </Wix>

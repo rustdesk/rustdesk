@@ -81,6 +81,8 @@ mod video_qos;
 pub mod video_service;
 
 #[cfg(all(target_os = "windows", feature = "flutter"))]
+mod pdf_printer_service;
+#[cfg(all(target_os = "windows", feature = "flutter"))]
 pub mod printer_service;
 
 pub type Childs = Arc<Mutex<Vec<std::process::Child>>>;
@@ -162,19 +164,9 @@ pub fn new() -> ServerPtr {
         }
     }
     #[cfg(all(target_os = "windows", feature = "flutter"))]
-    {
-        match printer_service::init(&crate::get_app_name()) {
-            Ok(()) => {
-                log::info!("printer service initialized");
-                server.add_service(Box::new(printer_service::new(
-                    printer_service::NAME.to_owned(),
-                )));
-            }
-            Err(e) => {
-                log::error!("printer service init failed: {}", e);
-            }
-        }
-    }
+    pdf_printer_service::register(&mut server);
+    #[cfg(all(target_os = "windows", feature = "flutter"))]
+    printer_service::register(&mut server);
     // Terminal service is created per connection, not globally
     Arc::new(RwLock::new(server))
 }

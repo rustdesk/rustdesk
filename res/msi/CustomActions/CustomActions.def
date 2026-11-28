@@ -12,6 +12,7 @@ EXPORTS
     SetPropertyFromConfig
     AddRegSoftwareSASGeneration
     RemoveAmyuniIdd
-    InstallPrinter
-    UninstallPrinter
     SetPrinterInstallDefault
+    CheckPdfPrinter
+    ScheduleUpgradePrinterRecovery
+    RestoreUpgradePrinter
