@@ -435,7 +435,7 @@ class ChatModel with ChangeNotifier {
             }
           } else {
             if (notSelected) {
-              UnreadChatCountState.find(peerId).value += 1;
+              UnreadChatCountState.find(parent.target?.stateKeyFor(peerId) ?? peerId).value += 1;
             }
           }
         }

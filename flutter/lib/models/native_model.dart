@@ -8,7 +8,6 @@ import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/consts.dart';
-import 'package:flutter_hbb/main.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -135,7 +134,7 @@ class PlatformFFI {
           sessionId: sessionId, display: display, ptr: ptr);
 
   /// Init the FFI class, loads the native Rust core library.
-  Future<void> init(String appType) async {
+  Future<void> init(String appType, {int? windowId}) async {
     _appType = appType;
     final dylib = isAndroid
         ? DynamicLibrary.open('librustdesk.so')
@@ -170,7 +169,7 @@ class PlatformFFI {
         // Start ipc service for uri links.
         _ffiBind.mainStartIpcUrlServer();
       }
-      _startListenEvent(_ffiBind); // global event
+      _startListenEvent(_ffiBind, windowId: windowId);
       try {
         if (isAndroid) {
           // Android file transfer uses app-specific storage. User-selected
@@ -228,7 +227,7 @@ class PlatformFFI {
         debugPrint(
             '_appType:$_appType,info1-id:$id,info2-name:$name,dir:$_dir');
       }
-      if (desktopType == DesktopType.cm) {
+      if (appType == kAppTypeConnectionManager) {
         await _ffiBind.cmInit();
       }
       await _ffiBind.mainDeviceId(id: id);
@@ -261,9 +260,9 @@ class PlatformFFI {
   }
 
   /// Start listening to the Rust core's events and frames.
-  void _startListenEvent(RustdeskImpl rustdeskImpl) {
+  void _startListenEvent(RustdeskImpl rustdeskImpl, {required int? windowId}) {
     final appType =
-        _appType == kAppTypeDesktopRemote ? '$_appType,$kWindowId' : _appType;
+        _appType == kAppTypeDesktopRemote ? '$_appType,$windowId' : _appType;
     var sink = rustdeskImpl.startGlobalEventStream(appType: appType);
     sink.listen((message) {
       () async {

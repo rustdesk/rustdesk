@@ -10,7 +10,7 @@ import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/remote_page.dart';
 import 'package:flutter_hbb/desktop/pages/view_camera_page.dart';
-import 'package:flutter_hbb/main.dart';
+import 'package:flutter_hbb/desktop/window_scope.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
@@ -295,6 +295,9 @@ class _DesktopTabState extends State<DesktopTab>
     with MultiWindowListener, WindowListener {
   Timer? _macOSCheckRestoreTimer;
   int _macOSCheckRestoreCounter = 0;
+  DesktopWindowScope? _window;
+
+  StateGlobal get _windowState => _window?.windowState ?? stateGlobal;
 
   bool get showLogo => widget.showLogo;
   bool get showTitle => widget.showTitle;
@@ -336,24 +339,29 @@ class _DesktopTabState extends State<DesktopTab>
   @override
   void initState() {
     super.initState();
-    DesktopMultiWindow.addListener(this);
-    windowManager.addListener(this);
+    _window = DesktopWindowScope.read(context);
+    if (_window case final window?) {
+      window.run(() => DesktopMultiWindow.addListener(this));
+    } else {
+      DesktopMultiWindow.addListener(this);
+    }
+    if (_window?.nativeTitleBar != true) windowManager.addListener(this);
 
     Future.delayed(Duration(milliseconds: 500), () {
       if (isMainWindow) {
         windowManager.isMaximized().then((maximized) {
-          if (stateGlobal.isMaximized.value != maximized) {
+          if (_windowState.isMaximized.value != maximized) {
             WidgetsBinding.instance.addPostFrameCallback(
-                (_) => setState(() => stateGlobal.setMaximized(maximized)));
+                (_) => setState(() => _windowState.setMaximized(maximized)));
           }
         });
       } else {
-        final wc = WindowController.fromWindowId(kWindowId!);
+        final wc = WindowController.fromWindowId(_window!.windowId);
         wc.isMaximized().then((maximized) {
           debugPrint("isMaximized $maximized");
-          if (stateGlobal.isMaximized.value != maximized) {
+          if (_windowState.isMaximized.value != maximized) {
             WidgetsBinding.instance.addPostFrameCallback(
-                (_) => setState(() => stateGlobal.setMaximized(maximized)));
+                (_) => setState(() => _windowState.setMaximized(maximized)));
           }
         });
       }
@@ -362,48 +370,52 @@ class _DesktopTabState extends State<DesktopTab>
 
   @override
   void dispose() {
-    DesktopMultiWindow.removeListener(this);
-    windowManager.removeListener(this);
+    if (_window case final window?) {
+      window.run(() => DesktopMultiWindow.removeListener(this));
+    } else {
+      DesktopMultiWindow.removeListener(this);
+    }
+    if (_window?.nativeTitleBar != true) windowManager.removeListener(this);
     _macOSCheckRestoreTimer?.cancel();
     super.dispose();
   }
 
   void _setMaximized(bool maximize) {
-    stateGlobal.setMaximized(maximize);
+    _windowState.setMaximized(maximize);
     _saveFrame();
     setState(() {});
   }
 
   @override
   void onWindowFocus() {
-    stateGlobal.isFocused.value = true;
+    _windowState.isFocused.value = true;
   }
 
   @override
   void onWindowBlur() {
-    stateGlobal.isFocused.value = false;
+    _windowState.isFocused.value = false;
   }
 
   @override
   void onWindowMinimize() {
-    stateGlobal.setMinimized(true);
+    _windowState.setMinimized(true);
     // GTK preserves maximization and may restore without a maximize event.
     if (!isLinux) {
-      stateGlobal.setMaximized(false);
+      _windowState.setMaximized(false);
     }
     super.onWindowMinimize();
   }
 
   @override
   void onWindowMaximize() {
-    stateGlobal.setMinimized(false);
+    _windowState.setMinimized(false);
     _setMaximized(true);
     super.onWindowMaximize();
   }
 
   @override
   void onWindowUnmaximize() {
-    stateGlobal.setMinimized(false);
+    _windowState.setMinimized(false);
     _setMaximized(false);
     super.onWindowUnmaximize();
   }
@@ -412,9 +424,9 @@ class _DesktopTabState extends State<DesktopTab>
     try {
       if (tabType == DesktopTabType.main) {
         await saveWindowPosition(WindowType.Main, flush: flush);
-      } else if (kWindowType != null && kWindowId != null) {
-        await saveWindowPosition(kWindowType!,
-            windowId: kWindowId, flush: flush);
+      } else if (_window case final window?) {
+        await saveWindowPosition(window.windowType,
+            windowId: window.windowId, flush: flush);
       }
     } catch (e) {
       debugPrint('Error saving window position: $e');
@@ -456,7 +468,7 @@ class _DesktopTabState extends State<DesktopTab>
       }
       await windowController.hide();
       await rustDeskWinManager
-          .call(WindowType.Main, kWindowEventHide, {"id": kWindowId!});
+          .call(WindowType.Main, kWindowEventHide, {"id": _window!.windowId});
     }
 
     macOSWindowClose(
@@ -497,7 +509,7 @@ class _DesktopTabState extends State<DesktopTab>
       }
     } else {
       // it's safe to hide the subwindow
-      final controller = WindowController.fromWindowId(kWindowId!);
+      final controller = WindowController.fromWindowId(_window!.windowId);
       if (isMacOS) {
         // onWindowClose() maybe called multiple times because of loopCloseWindow() in remote_tab_page.dart.
         // use ??=  to make sure the value is set on first call.
@@ -505,7 +517,7 @@ class _DesktopTabState extends State<DesktopTab>
         if (await onWindowCloseButton?.call() ?? true) {
           if (await controller.isFullScreen()) {
             await controller.setFullscreen(false);
-            stateGlobal.setFullscreen(false, procWnd: false);
+            _windowState.setFullscreen(false, procWnd: false);
             await macOSWindowClose(
               () async => await controller.isFullScreen(),
               () async => await notMainWindowClose(controller),
@@ -525,7 +537,7 @@ class _DesktopTabState extends State<DesktopTab>
   Widget build(BuildContext context) {
     return Column(children: [
       Obx(() {
-        if (stateGlobal.showTabBar.isTrue &&
+        if (_windowState.showTabBar.isTrue &&
             !(kUseCompatibleUiMode && isHideSingleItem())) {
           final showBottomDivider = _showTabBarBottomDivider(tabType);
           return SizedBox(
@@ -607,34 +619,38 @@ class _DesktopTabState extends State<DesktopTab>
 
   Widget _buildBar() {
     final isIncomingHomePage = bind.isIncomingOnly() && isInHomePage();
+    final hasNativeTitleBar = _window?.nativeTitleBar == true;
     return Row(
       children: [
         Expanded(
             child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
                 // custom double tap handler
-                onTap: !isIncomingHomePage && showMaximize
+                onTap: !hasNativeTitleBar && !isIncomingHomePage && showMaximize
                     ? () {
                         final current = DateTime.now().millisecondsSinceEpoch;
                         final elapsed = current - _lastClickTime;
                         _lastClickTime = current;
                         if (elapsed < bind.getDoubleClickTime()) {
                           // onDoubleTap
-                          toggleMaximize(isMainWindow)
-                              .then((value) => stateGlobal.setMaximized(value));
+                          toggleMaximize(isMainWindow, windowId: _window?.windowId)
+                              .then((value) => _windowState.setMaximized(value));
                         }
                       }
                     : (isIncomingHomePage ? () {} : null), // Keep tap recognizer for Windows touch.
-                onPanStart: (_) => startDragging(isMainWindow),
+                onPanStart: hasNativeTitleBar && !isWindows
+                    ? null
+                    : (_) => startDragging(isMainWindow, windowId: _window?.windowId),
                 onPanCancel: () {
                   // We want to disable dragging of the tab area in the tab bar.
                   // Disable dragging is needed because macOS handles dragging by default.
                   if (isMacOS) {
-                    setMovable(isMainWindow, false);
+                    setMovable(isMainWindow, false, windowId: _window?.windowId);
                   }
                 },
                 onPanEnd: (_) {
                   if (isMacOS) {
-                    setMovable(isMainWindow, false);
+                    setMovable(isMainWindow, false, windowId: _window?.windowId);
                   }
                 },
                 child: Row(
@@ -697,6 +713,7 @@ class _DesktopTabState extends State<DesktopTab>
         // hide simulated action buttons when we in compatible ui mode, because of reusing system title bar.
         WindowActionPanel(
           isMainWindow: isMainWindow,
+          window: _window,
           state: state,
           tabController: controller,
           invisibleTabKeys: invisibleTabKeys,
@@ -714,6 +731,7 @@ class _DesktopTabState extends State<DesktopTab>
 
 class WindowActionPanel extends StatefulWidget {
   final bool isMainWindow;
+  final DesktopWindowScope? window;
   final Rx<DesktopTabState> state;
   final DesktopTabController tabController;
 
@@ -729,6 +747,7 @@ class WindowActionPanel extends StatefulWidget {
   const WindowActionPanel(
       {Key? key,
       required this.isMainWindow,
+      required this.window,
       required this.state,
       required this.tabController,
       required this.invisibleTabKeys,
@@ -747,6 +766,9 @@ class WindowActionPanel extends StatefulWidget {
 }
 
 class WindowActionPanelState extends State<WindowActionPanel> {
+  DesktopWindowScope? get _window => widget.window;
+  StateGlobal get _windowState => _window?.windowState ?? stateGlobal;
+
   bool showTabDowndown() {
     return widget.tabController.state.value.tabs.length > 1 &&
         (widget.tabController.tabType == DesktopTabType.remoteScreen ||
@@ -779,7 +801,7 @@ class WindowActionPanelState extends State<WindowActionPanel> {
           }
         }),
         if (widget.tail != null) widget.tail!,
-        if (!kUseCompatibleUiMode)
+        if (!kUseCompatibleUiMode && _window?.nativeTitleBar != true)
           Row(
             children: [
               if (widget.showMinimize && !isMacOS)
@@ -790,17 +812,17 @@ class WindowActionPanelState extends State<WindowActionPanel> {
                     if (widget.isMainWindow) {
                       windowManager.minimize();
                     } else {
-                      WindowController.fromWindowId(kWindowId!).minimize();
+                      WindowController.fromWindowId(_window!.windowId).minimize();
                     }
                   },
                   isClose: false,
                 ),
               if (widget.showMaximize && !isMacOS)
                 Obx(() => ActionIcon(
-                      message: stateGlobal.isMaximized.isTrue
+                      message: _windowState.isMaximized.isTrue
                           ? 'Restore'
                           : 'Maximize',
-                      icon: stateGlobal.isMaximized.isTrue
+                      icon: _windowState.isMaximized.isTrue
                           ? IconFont.restore
                           : IconFont.max,
                       onTap: bind.isIncomingOnly() && isInHomePage()
@@ -821,7 +843,7 @@ class WindowActionPanelState extends State<WindowActionPanel> {
                         if (widget.isMainWindow) {
                           await windowManager.close();
                         } else {
-                          await WindowController.fromWindowId(kWindowId!)
+                          await WindowController.fromWindowId(_window!.windowId)
                               .close();
                         }
                       });
@@ -836,32 +858,32 @@ class WindowActionPanelState extends State<WindowActionPanel> {
   }
 
   void _toggleMaximize() {
-    toggleMaximize(widget.isMainWindow).then((maximize) {
+    toggleMaximize(widget.isMainWindow, windowId: _window?.windowId).then((maximize) {
       // update state for sub window, wc.unmaximize/maximize() will not invoke onWindowMaximize/Unmaximize
-      stateGlobal.setMaximized(maximize);
+      _windowState.setMaximized(maximize);
     });
   }
 }
 
-void startDragging(bool isMainWindow) {
+void startDragging(bool isMainWindow, {required int? windowId}) {
   if (isMainWindow) {
     windowManager.startDragging();
   } else {
-    WindowController.fromWindowId(kWindowId!).startDragging();
+    WindowController.fromWindowId(windowId!).startDragging();
   }
 }
 
-void setMovable(bool isMainWindow, bool movable) {
+void setMovable(bool isMainWindow, bool movable, {required int? windowId}) {
   if (isMainWindow) {
     windowManager.setMovable(movable);
   } else {
-    WindowController.fromWindowId(kWindowId!).setMovable(movable);
+    WindowController.fromWindowId(windowId!).setMovable(movable);
   }
 }
 
 /// return true -> window will be maximize
 /// return false -> window will be unmaximize
-Future<bool> toggleMaximize(bool isMainWindow) async {
+Future<bool> toggleMaximize(bool isMainWindow, {required int? windowId}) async {
   if (isMainWindow) {
     if (await windowManager.isMaximized()) {
       windowManager.unmaximize();
@@ -871,7 +893,7 @@ Future<bool> toggleMaximize(bool isMainWindow) async {
       return true;
     }
   } else {
-    final wc = WindowController.fromWindowId(kWindowId!);
+    final wc = WindowController.fromWindowId(windowId!);
     if (await wc.isMaximized()) {
       wc.unmaximize();
       return false;

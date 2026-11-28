@@ -16,6 +16,8 @@ import 'package:flutter_hbb/desktop/screen/desktop_port_forward_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_remote_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_terminal_screen.dart';
 import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
+import 'package:flutter_hbb/desktop/window_scope.dart';
+import 'package:flutter_hbb/desktop/windowing_preview.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -48,10 +50,11 @@ Future<void> main(List<String> args) async {
   }
   // main window
   if (args.isNotEmpty && args.first == 'multi_window') {
-    kWindowId = int.parse(args[1]);
-    stateGlobal.setWindowId(kWindowId!);
+    final windowId = int.parse(args[1]);
+    kWindowId = windowId;
+    stateGlobal.setWindowId(windowId);
     if (!isMacOS) {
-      WindowController.fromWindowId(kWindowId!).showTitleBar(false);
+      WindowController.fromWindowId(windowId).showTitleBar(false);
     }
     final argument = args[2].isEmpty
         ? <String, dynamic>{}
@@ -59,12 +62,15 @@ Future<void> main(List<String> args) async {
     int type = argument['type'] ?? -1;
     // to-do: No need to parse window id ?
     // Because stateGlobal.windowId is a global value.
-    argument['windowId'] = kWindowId;
-    kWindowType = type.windowType;
-    switch (kWindowType) {
+    argument['windowId'] = windowId;
+    final windowType = type.windowType;
+    kWindowType = windowType;
+    switch (windowType) {
       case WindowType.RemoteDesktop:
         desktopType = DesktopType.remote;
         runMultiWindow(
+          windowId,
+          windowType,
           argument,
           kAppTypeDesktopRemote,
         );
@@ -72,6 +78,8 @@ Future<void> main(List<String> args) async {
       case WindowType.FileTransfer:
         desktopType = DesktopType.fileTransfer;
         runMultiWindow(
+          windowId,
+          windowType,
           argument,
           kAppTypeDesktopFileTransfer,
         );
@@ -79,6 +87,8 @@ Future<void> main(List<String> args) async {
       case WindowType.ViewCamera:
         desktopType = DesktopType.viewCamera;
         runMultiWindow(
+          windowId,
+          windowType,
           argument,
           kAppTypeDesktopViewCamera,
         );
@@ -86,6 +96,8 @@ Future<void> main(List<String> args) async {
       case WindowType.PortForward:
         desktopType = DesktopType.portForward;
         runMultiWindow(
+          windowId,
+          windowType,
           argument,
           kAppTypeDesktopPortForward,
         );
@@ -93,6 +105,8 @@ Future<void> main(List<String> args) async {
       case WindowType.Terminal:
         desktopType = DesktopType.terminal;
         runMultiWindow(
+          windowId,
+          windowType,
           argument,
           kAppTypeDesktopTerminal,
         );
@@ -117,9 +131,9 @@ Future<void> main(List<String> args) async {
   }
 }
 
-Future<void> initEnv(String appType) async {
+Future<void> initEnv(String appType, {int? windowId}) async {
   // global shared preference
-  await platformFFI.init(appType);
+  await platformFFI.init(appType, windowId: windowId);
   // global FFI, use this **ONLY** for global configuration
   // for convenience, use global FFI on mobile platform
   // focus on multi-ffi on desktop first
@@ -141,7 +155,13 @@ void runMainApp(bool startService) async {
   }
   await Future.wait([gFFI.abModel.loadCache(), gFFI.groupModel.loadCache()]);
   gFFI.userModel.refreshCurrentUser();
-  runApp(App());
+  final app = App();
+  final previewRoot = mountWindowingPreview(app, kBootArgs);
+  if (previewRoot != null) {
+    runWidget(previewRoot);
+  } else {
+    runApp(app);
+  }
 
   bool? alwaysOnTop;
   if (isDesktop) {
@@ -186,15 +206,18 @@ void runMobileApp() async {
 }
 
 void runMultiWindow(
+  int windowId,
+  WindowType windowType,
   Map<String, dynamic> argument,
   String appType,
 ) async {
-  await initEnv(appType);
+  await initEnv(appType, windowId: windowId);
   final title = getWindowName();
   // set prevent close to true, we handle close event manually
-  WindowController.fromWindowId(kWindowId!).setPreventClose(true);
+  final controller = WindowController.fromWindowId(windowId);
+  controller.setPreventClose(true);
   if (isMacOS) {
-    disableWindowMovable(kWindowId);
+    disableWindowMovable(windowId);
   }
   late Widget widget;
   switch (appType) {
@@ -231,12 +254,17 @@ void runMultiWindow(
   }
   _runApp(
     title,
-    widget,
+    DesktopWindowScope(
+      windowId: windowId,
+      windowType: windowType,
+      windowState: stateGlobal,
+      child: widget,
+    ),
     MyTheme.currentThemeMode(),
   );
   // we do not hide titlebar on win7 because of the frame overflow.
   if (kUseCompatibleUiMode) {
-    WindowController.fromWindowId(kWindowId!).showTitleBar(true);
+    controller.showTitleBar(true);
   }
   switch (appType) {
     case kAppTypeDesktopRemote:
@@ -245,7 +273,7 @@ void runMultiWindow(
         // display can be used to control the offset of the window.
         await restoreWindowPosition(
           WindowType.RemoteDesktop,
-          windowId: kWindowId!,
+          windowId: windowId,
           peerId: argument['id'] as String?,
           display: argument['display'] as int?,
         );
@@ -253,7 +281,7 @@ void runMultiWindow(
       break;
     case kAppTypeDesktopFileTransfer:
       await restoreWindowPosition(WindowType.FileTransfer,
-          windowId: kWindowId!);
+          windowId: windowId);
       break;
     case kAppTypeDesktopViewCamera:
       // If screen rect is set, the window will be moved to the target screen and then set fullscreen.
@@ -261,7 +289,7 @@ void runMultiWindow(
         // display can be used to control the offset of the window.
         await restoreWindowPosition(
           WindowType.ViewCamera,
-          windowId: kWindowId!,
+          windowId: windowId,
           peerId: argument['id'] as String?,
           // FIXME: fix display index.
           display: argument['display'] as int?,
@@ -269,17 +297,17 @@ void runMultiWindow(
       }
       break;
     case kAppTypeDesktopPortForward:
-      await restoreWindowPosition(WindowType.PortForward, windowId: kWindowId!);
+      await restoreWindowPosition(WindowType.PortForward, windowId: windowId);
       break;
     case kAppTypeDesktopTerminal:
-      await restoreWindowPosition(WindowType.Terminal, windowId: kWindowId!);
+      await restoreWindowPosition(WindowType.Terminal, windowId: windowId);
       break;
     default:
       // no such appType
       exit(0);
   }
   // show window from hidden status
-  WindowController.fromWindowId(kWindowId!).show();
+  controller.show();
 }
 
 void runConnectionManagerScreen() async {
@@ -355,10 +383,19 @@ void _runApp(
   Widget home,
   ThemeMode themeMode,
 ) {
+  runApp(_buildSessionApp(title, home, themeMode, navigatorKey: globalKey));
+}
+
+Widget _buildSessionApp(
+  String title,
+  Widget home,
+  ThemeMode themeMode, {
+  required GlobalKey<NavigatorState> navigatorKey,
+}) {
   final botToastBuilder = BotToastInit();
-  runApp(RefreshWrapper(
+  return RefreshWrapper(
     builder: (context) => GetMaterialApp(
-      navigatorKey: globalKey,
+      navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
       title: title,
       theme: MyTheme.lightTheme,
@@ -381,7 +418,7 @@ void _runApp(
         return child;
       },
     ),
-  ));
+  );
 }
 
 void runInstallPage() async {

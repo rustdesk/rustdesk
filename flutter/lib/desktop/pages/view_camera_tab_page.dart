@@ -11,6 +11,9 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/input_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/desktop/pages/view_camera_page.dart';
+import 'package:flutter_hbb/desktop/window_scope.dart';
+import 'package:flutter_hbb/desktop/windowing_preview.dart';
+import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/desktop/widgets/material_mod_popup_menu.dart'
@@ -40,8 +43,9 @@ class ViewCameraTabPage extends StatefulWidget {
 }
 
 class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
-  final tabController =
-      Get.put(DesktopTabController(tabType: DesktopTabType.viewCamera));
+  final tabController = DesktopTabController(tabType: DesktopTabType.viewCamera);
+  DesktopWindowScope? _window;
+  StateGlobal get _windowState => _window?.windowState ?? stateGlobal;
   final contentKey = UniqueKey();
   static const IconData selectedIcon = Icons.desktop_windows_sharp;
   static const IconData unselectedIcon = Icons.desktop_windows_outlined;
@@ -52,7 +56,12 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
 
   var connectionMap = RxList<Widget>.empty(growable: true);
 
-  _ViewCameraTabPageState(Map<String, dynamic> params) {
+  final int _sessionWindowId;
+  String _stateKey(String id) =>
+      isOfficialSessionWindow(_sessionWindowId) ? '$_sessionWindowId:$id' : id;
+
+  _ViewCameraTabPageState(Map<String, dynamic> params)
+      : _sessionWindowId = params['windowId'] as int? ?? 0 {
     RemoteCountState.init();
     peerId = params['id'];
     final sessionId = params['session_id'];
@@ -62,9 +71,8 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
     final screenRect = parseParamScreenRect(params);
     _isScreenRectSet = screenRect != null;
     _display = display as int?;
-    tryMoveToScreenAndSetFullscreen(screenRect);
     if (peerId != null) {
-      ConnectionTypeState.init(peerId!);
+      ConnectionTypeState.init(_stateKey(peerId!));
       tabController.onSelected = (id) {
         final viewCameraPage = tabController.widget(id);
         if (viewCameraPage is ViewCameraPage) {
@@ -72,8 +80,9 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
           bind.setCurSessionId(sessionId: ffi.sessionId);
         }
         WindowController.fromWindowId(params['windowId'])
-            .setTitle(getWindowNameWithId(id));
-        UnreadChatCountState.find(id).value = 0;
+            .setTitle(getWindowNameWithId(id,
+                overrideType: WindowType.ViewCamera));
+        UnreadChatCountState.find(_stateKey(id)).value = 0;
       };
       tabController.add(TabInfo(
         key: peerId!,
@@ -92,6 +101,7 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
         page: ViewCameraPage(
           key: ValueKey(peerId),
           id: peerId!,
+          sessionStateKey: _stateKey(peerId!),
           sessionId: sessionId == null ? null : SessionID(sessionId),
           tabWindowId: tabWindowId,
           display: display,
@@ -108,15 +118,26 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
       _update_remote_count();
     }
     tabController.onRemoved = (_, id) => onRemoveId(id);
-    rustDeskWinManager.setMethodHandler(_remoteMethodHandler);
   }
 
   @override
   void initState() {
     super.initState();
 
-    if (!_isScreenRectSet) {
+    final window = _window = DesktopWindowScope.read(context);
+    if (window?.nativeTitleBar != true) Get.put(tabController);
+    if (window == null) {
+      rustDeskWinManager.setMethodHandler(_remoteMethodHandler);
+    } else {
+      window.run(
+          () => rustDeskWinManager.setMethodHandler(_remoteMethodHandler));
+    }
+    if (_isScreenRectSet) {
+      tryMoveToScreenAndSetFullscreen(parseParamScreenRect(widget.params),
+          windowState: _windowState);
+    } else {
       Future.delayed(Duration.zero, () {
+        if (!mounted) return;
         restoreWindowPosition(
           WindowType.ViewCamera,
           windowId: windowId(),
@@ -141,7 +162,7 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
         pageViewBuilder: (pageView) => pageView,
         labelGetter: DesktopTab.tablabelGetter,
         tabBuilder: (key, icon, label, themeConf) => Obx(() {
-          final connectionType = ConnectionTypeState.find(key);
+          final connectionType = ConnectionTypeState.find(_stateKey(key));
           if (!connectionType.isValid()) {
             return Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -158,7 +179,7 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
             String msgConn = getConnectionText(
                 secure, direct, connectionType.stream_type.value);
             var msgFingerprint = '${translate('Fingerprint')}:\n';
-            var fingerprint = FingerprintState.find(key).value;
+            var fingerprint = FingerprintState.find(_stateKey(key)).value;
             if (fingerprint.isEmpty) {
               fingerprint = 'N/A';
             }
@@ -183,7 +204,7 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
                   ).paddingOnly(right: 5),
                 ),
                 label,
-                unreadMessageCountBuilder(UnreadChatCountState.find(key))
+                unreadMessageCountBuilder(UnreadChatCountState.find(_stateKey(key)))
                     .marginOnly(left: 4),
               ],
             );
@@ -212,6 +233,7 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
         }),
       ),
     );
+    if (_window?.nativeTitleBar == true) return child;
     final tabWidget = isLinux
         ? buildVirtualWindowFrame(context, child)
         : workaroundWindowBorder(
@@ -220,7 +242,7 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
                   decoration: BoxDecoration(
                     border: Border.all(
                         color: MyTheme.color(context).border!,
-                        width: stateGlobal.windowBorderWidth.value),
+                        width: _windowState.windowBorderWidth.value),
                   ),
                   child: child,
                 )));
@@ -231,9 +253,9 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
               child: tabWidget,
               // Specially configured for a better resize area and remote control.
               childPadding: kDragToResizeAreaPadding,
-              resizeEdgeSize: stateGlobal.resizeEdgeSize.value,
+              resizeEdgeSize: _windowState.resizeEdgeSize.value,
               enableResizeEdges: subWindowManagerEnableResizeEdges,
-              windowId: stateGlobal.windowId,
+              windowId: _windowState.windowId,
             ));
   }
 
@@ -287,7 +309,7 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
           translate('Copy Fingerprint'),
           style: style,
         ),
-        proc: () => onCopyFingerprint(FingerprintState.find(key).value),
+        proc: () => onCopyFingerprint(FingerprintState.find(_stateKey(key)).value),
         padding: padding,
         dismissOnClicked: true,
         dismissCallback: cancelFunc,
@@ -346,7 +368,7 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
 
       loopCloseWindow();
     }
-    ConnectionTypeState.delete(id);
+    ConnectionTypeState.delete(_stateKey(id));
     _update_remote_count();
   }
 
@@ -401,17 +423,18 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
       final screenRect = parseParamScreenRect(args);
       final prePeerCount = tabController.length;
       Future.delayed(Duration.zero, () async {
-        if (stateGlobal.fullscreen.isTrue) {
+        if (_windowState.fullscreen.isTrue) {
           await WindowController.fromWindowId(windowId()).setFullscreen(false);
-          stateGlobal.setFullscreen(false, procWnd: false);
+          _windowState.setFullscreen(false, procWnd: false);
         }
         await setNewConnectWindowFrame(windowId(), id!, prePeerCount,
-            WindowType.ViewCamera, display, screenRect);
+            WindowType.ViewCamera, display, screenRect,
+            windowState: _windowState);
         Future.delayed(Duration(milliseconds: isWindows ? 100 : 0), () async {
           await windowOnTop(windowId());
         });
       });
-      ConnectionTypeState.init(id);
+      ConnectionTypeState.init(_stateKey(id));
       tabController.add(TabInfo(
         key: id,
         label: id,
@@ -429,6 +452,7 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
         page: ViewCameraPage(
           key: ValueKey(id),
           id: id,
+          sessionStateKey: _stateKey(id),
           sessionId: sessionId == null ? null : SessionID(sessionId),
           tabWindowId: tabWindowId,
           display: display,
@@ -447,7 +471,12 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
     } else if (call.method == "onDestroy") {
       tabController.clear();
     } else if (call.method == kWindowActionRebuild) {
-      reloadCurrentWindow();
+      if (!mounted) return;
+      if (_window?.nativeTitleBar == true) {
+        RefreshWrapper.of(context)?.rebuild();
+      } else {
+        reloadCurrentWindow();
+      }
     } else if (call.method == kWindowEventActiveSession) {
       final jumpOk = tabController.jumpToByKey(call.arguments);
       if (jumpOk) {
@@ -516,7 +545,7 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
         }
       }
     } else if (call.method == kWindowEventSetFullscreen) {
-      stateGlobal.setFullscreen(call.arguments == 'true');
+      _windowState.setFullscreen(call.arguments == 'true');
     }
     _update_remote_count();
     return returnValue;

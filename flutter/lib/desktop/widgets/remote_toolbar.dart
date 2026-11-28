@@ -483,11 +483,11 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
   int _dockingOptionSyncSerial = 0;
   int _dragEpoch = 0;
 
-  int get windowId => stateGlobal.windowId;
+  int get windowId => widget.ffi.desktopWindowState.windowId;
 
   void _setFullscreen(bool v) {
-    stateGlobal.setFullscreen(v);
-    // stateGlobal.fullscreen is RxBool now, no need to call setState.
+    widget.ffi.desktopWindowState.setFullscreen(v);
+    // The fullscreen observable updates the toolbar.
     // setState(() {});
   }
 
@@ -805,7 +805,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     final List<Widget> toolbarItems = [];
     toolbarItems.add(_PinMenu(state: widget.state));
     toolbarItems.add(Obx(() {
-      final privacyModeState = PrivacyModeState.find(widget.id);
+      final privacyModeState = PrivacyModeState.find(widget.ffi.stateKeyFor(widget.id));
       if ((privacyModeState.isEmpty ||
               allowDisplaySwitchInPrivacyMode(pi, privacyModeState.value)) &&
           pi.displaysCount.value > 1 &&
@@ -820,7 +820,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     }
 
     toolbarItems.add(Obx(() {
-      final privacyModeState = PrivacyModeState.find(widget.id);
+      final privacyModeState = PrivacyModeState.find(widget.ffi.stateKeyFor(widget.id));
       if ((privacyModeState.isEmpty ||
               allowDisplaySwitchInPrivacyMode(pi, privacyModeState.value)) &&
           pi.displaysCount.value > 1) {
@@ -982,7 +982,7 @@ class _MonitorCycle {
 
   PeerInfo get _pi => ffi.ffiModel.pi;
   int get total => _pi.displays.length;
-  int get _current => CurrentDisplayState.find(id).value;
+  int get _current => CurrentDisplayState.find(ffi.stateKeyFor(id)).value;
   bool get _inRange => _current >= 0 && _current < total;
 
   String get label => _inRange ? '${_current + 1}' : '*';
@@ -1152,7 +1152,7 @@ class _MonitorMenu extends StatelessWidget {
     final pi = ffi.ffiModel.pi;
 
     buildMonitorButton(int i) => Obx(() {
-          RxInt display = CurrentDisplayState.find(id);
+          RxInt display = CurrentDisplayState.find(ffi.stateKeyFor(id));
 
           final isAllMonitors = i == kAllDisplayValue;
           final width = SimpleWrapper<double>(0);
@@ -1212,7 +1212,7 @@ class _MonitorMenu extends StatelessWidget {
       SimpleWrapper<double> width, Color activeTextColor, Color activeBgColor) {
     getMonitors() {
       final pi = ffi.ffiModel.pi;
-      RxInt display = CurrentDisplayState.find(id);
+      RxInt display = CurrentDisplayState.find(ffi.stateKeyFor(id));
       final rect = ffi.ffiModel.globalDisplaysRect();
       if (rect == null) {
         return Offstage();
@@ -1284,7 +1284,7 @@ class _MonitorMenu extends StatelessWidget {
       // If show monitors in toolbar(`buildMultiMonitorMenu()`), then the menu will dismiss automatically.
       _menuDismissCallback(ffi);
     }
-    RxInt display = CurrentDisplayState.find(id);
+    RxInt display = CurrentDisplayState.find(ffi.stateKeyFor(id));
     if (display.value != i) {
       final isChooseDisplayToOpenInNewWindow = pi.isSupportMultiDisplay &&
           bind.sessionGetDisplaysAsIndividualWindows(
@@ -1374,8 +1374,8 @@ class ScreenAdjustor {
     required this.cbExitFullscreen,
   });
 
-  bool get isFullscreen => stateGlobal.fullscreen.isTrue;
-  int get windowId => stateGlobal.windowId;
+  bool get isFullscreen => ffi.desktopWindowState.fullscreen.isTrue;
+  int get windowId => ffi.desktopWindowState.windowId;
 
   Future<bool?> isWindowMaximized() async {
     try {
@@ -1648,7 +1648,7 @@ class ScreenAdjustor {
           } catch (_) {
             return;
           }
-          stateGlobal.setMaximized(false);
+          ffi.desktopWindowState.setMaximized(false);
           // Wait for the window manager and Flutter view metrics to reflect
           // the restored window before calculating and setting its frame.
           await Future.delayed(Duration(milliseconds: 300));
@@ -1665,7 +1665,7 @@ class ScreenAdjustor {
       } catch (_) {
         return;
       }
-      stateGlobal.setMaximized(false);
+      ffi.desktopWindowState.setMaximized(false);
     }
   }
 
@@ -1733,7 +1733,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
     cbExitFullscreen: () => widget.setFullscreen(false),
   );
 
-  int get windowId => stateGlobal.windowId;
+  int get windowId => ffi.desktopWindowState.windowId;
   Map<String, bool> get perms => widget.ffi.ffiModel.permissions;
   PeerInfo get pi => widget.ffi.ffiModel.pi;
   FfiModel get ffiModel => widget.ffi.ffiModel;
@@ -1781,7 +1781,7 @@ class _DisplayMenuState extends State<_DisplayMenu> {
         toggles(),
       ];
       // privacy mode
-      final privacyModeState = PrivacyModeState.find(id);
+      final privacyModeState = PrivacyModeState.find(ffi.stateKeyFor(id));
       if (ffi.connType == ConnType.defaultConn &&
           (pi.features.privacyMode || privacyModeState.isNotEmpty) &&
           (ffiModel.keyboard || privacyModeState.isNotEmpty)) {
@@ -2301,7 +2301,7 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
       return;
     }
     final lastGroupValue =
-        stateGlobal.getLastResolutionGroupValue(widget.id, pi.currentDisplay);
+        ffi.desktopWindowState.getLastResolutionGroupValue(widget.id, pi.currentDisplay);
     if (lastGroupValue == _kCustomResolutionValue) {
       _groupValue = _kCustomResolutionValue;
     } else {
@@ -2364,7 +2364,7 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
     if (pi.currentDisplay == kAllDisplayValue) {
       return;
     }
-    stateGlobal.setLastResolutionGroupValue(
+    ffi.desktopWindowState.setLastResolutionGroupValue(
         widget.id, pi.currentDisplay, value);
     if (value == null) return;
 
@@ -2707,7 +2707,7 @@ class _KeyboardMenu extends StatelessWidget {
       return;
     }
     if (supportedInputSourceList.length < 2) return Offstage();
-    final inputSource = stateGlobal.getInputSource();
+    final inputSource = ffi.desktopWindowState.getInputSource();
     final enabled = !ffi.ffiModel.viewOnly;
     final children = <Widget>[Divider()];
     children.addAll(supportedInputSourceList.map((e) {
@@ -2719,7 +2719,7 @@ class _KeyboardMenu extends StatelessWidget {
         onChanged: enabled
             ? (v) async {
                 if (v != null) {
-                  await stateGlobal.setInputSource(ffi.sessionId, v);
+                  await ffi.desktopWindowState.setInputSource(ffi.sessionId, v);
                   // Release native input; see the macOS trade-offs in RemotePage.
                   if (isMacOS) ffi.inputModel.enterOrLeave(false);
                   await ffi.ffiModel.checkDesktopKeyboardMode();
@@ -3014,7 +3014,7 @@ class _CloseMenu extends StatelessWidget {
         if (await showConnEndAuditDialogCloseCanceled(ffi: ffi)) {
           return;
         }
-        closeConnection(id: id);
+        ffi.dialogManager.closeSession(id: id);
       },
       color: _ToolbarTheme.redColor,
       hoverColor: _ToolbarTheme.hoverRedColor,
@@ -3560,7 +3560,7 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
       minimumSize: MaterialStateProperty.all(const Size(0, 0)),
       padding: MaterialStateProperty.all(EdgeInsets.zero),
     );
-    final isFullscreen = stateGlobal.fullscreen;
+    final isFullscreen = widget.ffi.desktopWindowState.fullscreen;
     const double iconSize = 20;
 
     buttonWrapper(VoidCallback? onPressed, Widget child,
@@ -3637,7 +3637,7 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
               return Offstage();
             } else {
               return buttonWrapper(
-                () => closeConnection(id: widget.id),
+                () => widget.ffi.dialogManager.closeSession(id: widget.id),
                 Tooltip(
                   message: translate('Close'),
                   child: Icon(
@@ -3772,7 +3772,7 @@ class _MinimizedMonitorSwitchButton extends StatelessWidget {
         return const Offstage();
       }
       if (cycle.total < 2) return const Offstage();
-      final privacyModeState = PrivacyModeState.find(id);
+      final privacyModeState = PrivacyModeState.find(ffi.stateKeyFor(id));
       if (privacyModeState.isNotEmpty &&
           !allowDisplaySwitchInPrivacyMode(
               ffi.ffiModel.pi, privacyModeState.value)) {

@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/formatter/id_formatter.dart';
 import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
+import 'package:flutter_hbb/desktop/windowing_preview.dart';
 import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/models/peer_model.dart';
 import 'package:flutter_hbb/models/peer_tab_model.dart';
@@ -784,6 +785,18 @@ class OverlayKeyState {
 }
 
 class OverlayDialogManager {
+  VoidCallback? onCloseSession;
+  bool keepSessionOnMessage = false;
+
+  void closeSession({String? id}) {
+    final close = onCloseSession;
+    if (close == null) {
+      closeConnection(id: id);
+    } else {
+      close();
+    }
+  }
+
   final Map<String, Dialog> _dialogs = {};
   var _overlayKeyState = OverlayKeyState();
   int _tagCount = 0;
@@ -1191,7 +1204,7 @@ void msgBox(SessionID sessionId, String type, String title, String text,
         value: 'N',
       );
       dialogManager.dismissAll();
-      closeConnection();
+      dialogManager.closeSession();
     }
 
     void continueSession() {
@@ -1233,8 +1246,10 @@ void msgBox(SessionID sessionId, String type, String title, String text,
       onSubmit.call();
     } else {
       // https://github.com/rustdesk/rustdesk/blob/5e9a31340b899822090a3731769ae79c6bf5f3e5/src/ui/common.tis#L263
-      if (!type.contains("custom") && desktopType != DesktopType.portForward) {
-        closeConnection();
+      if (!type.contains("custom") &&
+          !dialogManager.keepSessionOnMessage &&
+          desktopType != DesktopType.portForward) {
+        dialogManager.closeSession();
       }
     }
   }
@@ -1776,8 +1791,7 @@ String get windowFramePrefix =>
 
 typedef WindowKey = ({WindowType type, int? windowId});
 
-LastWindowPosition? _lastWindowPosition = null;
-final Debouncer _saveWindowDebounce = Debouncer(delay: Duration(seconds: 1));
+final _pendingWindowPositions = <WindowKey, Timer>{};
 
 /// Save window position and size on exit
 /// Note that windowId must be provided if it's subwindow
@@ -1786,6 +1800,7 @@ Future<void> saveWindowPosition(WindowType type,
   if (type != WindowType.Main && windowId == null) {
     debugPrint(
         "Error: windowId cannot be null when saving positions for sub window");
+    return;
   }
 
   Offset? position;
@@ -1827,6 +1842,9 @@ Future<void> saveWindowPosition(WindowType type,
     default:
       final wc = WindowController.fromWindowId(windowId!);
       isMaximized = await wc.isMaximized();
+      if (isOfficialSessionWindow(windowId)) {
+        isFullscreen = await wc.isFullScreen();
+      }
       if (isFullscreen || isMaximized) {
         setPreFrame();
       } else {
@@ -1860,39 +1878,34 @@ Future<void> saveWindowPosition(WindowType type,
 
   final WindowKey key = (type: type, windowId: windowId);
 
-  final bool haveNewWindowPosition =
-      (_lastWindowPosition == null) || !pos.equals(_lastWindowPosition!);
-  final bool isPreviousNewWindowPositionPending = _saveWindowDebounce.isRunning;
-
-  if (haveNewWindowPosition || isPreviousNewWindowPositionPending) {
-    _lastWindowPosition = pos;
-
-    if (flush ?? false) {
-      // If a previous update is pending, replace it.
-      _saveWindowDebounce.cancel();
-      await _saveWindowPositionActual(key);
-    } else if (haveNewWindowPosition) {
-      _saveWindowDebounce.call(() => _saveWindowPositionActual(key));
-    }
+  _pendingWindowPositions.remove(key)?.cancel();
+  if (flush ?? false) {
+    await _saveWindowPositionActual(key, pos);
+  } else {
+    _pendingWindowPositions[key] = Timer(const Duration(seconds: 1), () async {
+      _pendingWindowPositions.remove(key);
+      try {
+        await _saveWindowPositionActual(key, pos);
+      } catch (error) {
+        debugPrint('Error saving window position: $error');
+      }
+    });
   }
 }
 
-Future<void> _saveWindowPositionActual(WindowKey key) async {
-  LastWindowPosition? pos = _lastWindowPosition;
+Future<void> _saveWindowPositionActual(
+    WindowKey key, LastWindowPosition pos) async {
+  debugPrint(
+      "Saving frame: ${key.windowId}: ${pos.width}/${pos.height}, offset:${pos.offsetWidth}/${pos.offsetHeight}, isMaximized:${pos.isMaximized}, isFullscreen:${pos.isFullscreen}");
 
-  if (pos != null) {
-    debugPrint(
-        "Saving frame: ${key.windowId}: ${pos.width}/${pos.height}, offset:${pos.offsetWidth}/${pos.offsetHeight}, isMaximized:${pos.isMaximized}, isFullscreen:${pos.isFullscreen}");
+  await bind.setLocalFlutterOption(
+      k: windowFramePrefix + key.type.name, v: pos.toString());
 
-    await bind.setLocalFlutterOption(
-        k: windowFramePrefix + key.type.name, v: pos.toString());
-
-    if ((key.type == WindowType.RemoteDesktop ||
-            key.type == WindowType.ViewCamera) &&
-        key.windowId != null) {
-      await _saveSessionWindowPosition(key.type, key.windowId!,
-          pos.isMaximized ?? false, pos.isFullscreen ?? false, pos);
-    }
+  if ((key.type == WindowType.RemoteDesktop ||
+          key.type == WindowType.ViewCamera) &&
+      key.windowId != null) {
+    await _saveSessionWindowPosition(key.type, key.windowId!,
+        pos.isMaximized ?? false, pos.isFullscreen ?? false, pos);
   }
 }
 
@@ -2074,7 +2087,9 @@ Future<bool> restoreWindowPosition(WindowType type,
     return true;
   }
   if (type == WindowType.RemoteDesktop || type == WindowType.ViewCamera) {
-    if (!isRemotePeerPos && windowId != null) {
+    if (!isRemotePeerPos &&
+        windowId != null &&
+        !isOfficialSessionWindow(windowId)) {
       if (lpos.offsetWidth != null) {
         lpos.offsetWidth = lpos.offsetWidth! + windowId * kNewWindowOffset;
       }
@@ -3073,6 +3088,8 @@ String getWindowName({WindowType? overrideType}) {
       return "Port Forward - $name";
     case WindowType.RemoteDesktop:
       return "Remote Desktop - $name";
+    case WindowType.Terminal:
+      return "Terminal - $name";
     default:
       break;
   }
@@ -3480,7 +3497,8 @@ openMonitorInNewTabOrWindow(int i, String peerId, PeerInfo pi,
 }
 
 setNewConnectWindowFrame(int windowId, String peerId, int preSessionCount,
-    WindowType windowType, int? display, Rect? screenRect) async {
+    WindowType windowType, int? display, Rect? screenRect,
+    {StateGlobal? windowState}) async {
   if (screenRect == null) {
     // Do not restore window position to new connection if there's a pre-session.
     // https://github.com/rustdesk/rustdesk/discussions/8825
@@ -3489,19 +3507,21 @@ setNewConnectWindowFrame(int windowId, String peerId, int preSessionCount,
           windowId: windowId, display: display, peerId: peerId);
     }
   } else {
-    await tryMoveToScreenAndSetFullscreen(screenRect);
+    await tryMoveToScreenAndSetFullscreen(screenRect, windowState: windowState);
   }
 }
 
-tryMoveToScreenAndSetFullscreen(Rect? screenRect) async {
+tryMoveToScreenAndSetFullscreen(Rect? screenRect,
+    {StateGlobal? windowState}) async {
   if (screenRect == null) {
     return;
   }
-  final wc = WindowController.fromWindowId(stateGlobal.windowId);
+  final state = windowState ?? stateGlobal;
+  final wc = WindowController.fromWindowId(state.windowId);
   final curFrame = await wc.getFrame();
   final frame =
       Rect.fromLTWH(screenRect.left + 30, screenRect.top + 30, 600, 400);
-  if (stateGlobal.fullscreen.isTrue &&
+  if (state.fullscreen.isTrue &&
       curFrame.left <= frame.left &&
       curFrame.top <= frame.top &&
       curFrame.width >= frame.width &&
@@ -3511,7 +3531,7 @@ tryMoveToScreenAndSetFullscreen(Rect? screenRect) async {
   await wc.setFrame(frame);
   // An duration is needed to avoid the window being restored after fullscreen.
   Future.delayed(Duration(milliseconds: 300), () async {
-    stateGlobal.setFullscreen(true);
+    state.setFullscreen(true);
   });
 }
 

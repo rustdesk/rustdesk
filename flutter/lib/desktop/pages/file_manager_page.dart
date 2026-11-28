@@ -98,6 +98,12 @@ class _FileManagerPageState extends State<FileManagerPage>
   void initState() {
     super.initState();
     _ffi = FFI(null);
+    final tabController = widget.tabController;
+    if (tabController != null) {
+      _ffi.dialogManager.onCloseSession = () {
+        if (mounted) tabController.closeBy(widget.id);
+      };
+    }
     _ffi.start(widget.id,
         isFileTransfer: true,
         password: widget.password,
@@ -106,8 +112,9 @@ class _FileManagerPageState extends State<FileManagerPage>
         connToken: widget.connToken,
         forceRelay: widget.forceRelay);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _ffi.dialogManager
-          .showLoading(translate('Connecting...'), onCancel: closeConnection);
+      if (!mounted) return;
+      _ffi.dialogManager.showLoading(translate('Connecting...'),
+          onCancel: _ffi.dialogManager.closeSession);
     });
     Get.put<FFI>(_ffi, tag: 'ft_${widget.id}');
     WakelockManager.enable(_uniqueKey);

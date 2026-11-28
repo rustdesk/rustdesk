@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/desktop/window_scope.dart';
+import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/desktop/pages/file_manager_page.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
@@ -24,16 +26,16 @@ class FileManagerTabPage extends StatefulWidget {
 }
 
 class _FileManagerTabPageState extends State<FileManagerTabPage> {
-  DesktopTabController get tabController => Get.find<DesktopTabController>();
+  final tabController = DesktopTabController(tabType: DesktopTabType.fileTransfer);
+  DesktopWindowScope? _window;
 
   static const IconData selectedIcon = Icons.file_copy_sharp;
   static const IconData unselectedIcon = Icons.file_copy_outlined;
 
   _FileManagerTabPageState(Map<String, dynamic> params) {
-    Get.put(DesktopTabController(tabType: DesktopTabType.fileTransfer));
     tabController.onSelected = (id) {
       WindowController.fromWindowId(windowId())
-          .setTitle(getWindowNameWithId(id));
+          .setTitle(getWindowNameWithId(id, overrideType: WindowType.FileTransfer));
     };
     tabController.onRemoved = (_, id) => onRemoveId(id);
     tabController.add(TabInfo(
@@ -65,7 +67,21 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
   @override
   void initState() {
     super.initState();
+    final window = _window = DesktopWindowScope.read(context);
+    if (window?.nativeTitleBar == true) {
+      window!.run(_registerHandler);
+    } else {
+      Get.put(tabController);
+      _registerHandler();
+      Future.delayed(Duration.zero, () {
+        if (mounted) {
+          restoreWindowPosition(WindowType.FileTransfer, windowId: windowId());
+        }
+      });
+    }
+  }
 
+  void _registerHandler() {
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
       debugPrint(
           "[FileTransfer] call ${call.method} with args ${call.arguments} from window $fromWindowId to ${windowId()}");
@@ -101,11 +117,13 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
       } else if (call.method == "onDestroy") {
         tabController.clear();
       } else if (call.method == kWindowActionRebuild) {
-        reloadCurrentWindow();
+        if (!mounted) return;
+        if (_window?.nativeTitleBar == true) {
+          RefreshWrapper.of(context)?.rebuild();
+        } else {
+          reloadCurrentWindow();
+        }
       }
-    });
-    Future.delayed(Duration.zero, () {
-      restoreWindowPosition(WindowType.FileTransfer, windowId: windowId());
     });
   }
 
@@ -120,6 +138,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
           selectedBorderColor: MyTheme.accent,
           labelGetter: DesktopTab.tablabelGetter,
         ));
+    if (_window?.nativeTitleBar == true) return child;
     final tabWidget = isLinux
         ? buildVirtualWindowFrame(context, child)
         : workaroundWindowBorder(

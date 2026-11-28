@@ -25,7 +25,7 @@ void clientClose(SessionID sessionId, FFI ffi) async {
     if (await showConnEndAuditDialogCloseCanceled(ffi: ffi)) {
       return;
     }
-    closeConnection();
+    ffi.dialogManager.closeSession();
   } else {
     msgBox(sessionId, 'info', 'Close', 'Are you sure to close the connection?',
         '', ffi.dialogManager);
@@ -901,7 +901,7 @@ void wrongPasswordDialog(SessionID sessionId,
   dialogManager.show((setState, close, context) {
     cancel() {
       close();
-      closeConnection();
+      dialogManager.closeSession();
     }
 
     submit() {
@@ -988,7 +988,7 @@ _connectDialog(
   dialogManager.show((setState, close, context) {
     cancel() {
       close();
-      closeConnection();
+      dialogManager.closeSession();
     }
 
     submit() {
@@ -1020,7 +1020,7 @@ _connectDialog(
             dialogManager);
       } else {
         dialogManager.showLoading(translate('Logging in...'),
-            onCancel: closeConnection);
+            onCancel: dialogManager.closeSession);
       }
     }
 
@@ -1398,7 +1398,7 @@ void showWaitAcceptDialog(SessionID sessionId, String type, String title,
   dialogManager.dismissAll();
   dialogManager.show((setState, close, context) {
     onCancel() {
-      closeConnection();
+      dialogManager.closeSession();
     }
 
     return CustomAlertDialog(
@@ -1821,7 +1821,7 @@ void showConfirmSwitchSidesDialog(
   dialogManager.show((setState, close, context) {
     submit() async {
       await bind.sessionSwitchSides(sessionId: sessionId);
-      closeConnection(id: id);
+      dialogManager.closeSession(id: id);
     }
 
     return CustomAlertDialog(
@@ -1846,7 +1846,7 @@ customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
   bool? direct;
   try {
     direct =
-        ConnectionTypeState.find(id).direct.value == ConnectionType.strDirect;
+        ConnectionTypeState.find(ffi.stateKeyFor(id)).direct.value == ConnectionType.strDirect;
   } catch (_) {}
   bool hideFps = (await bind.mainIsUsingPublicServer() && direct != true) ||
       versionCmp(ffi.ffiModel.pi.version, '1.2.0') < 0;
@@ -2368,14 +2368,14 @@ void enter2FaDialog(
   dialogManager.show((setState, close, context) {
     cancel() {
       close();
-      closeConnection();
+      dialogManager.closeSession();
     }
 
     submit() {
       gFFI.send2FA(sessionId, controller.text.trim(), trustThisDevice.value);
       close();
       dialogManager.showLoading(translate('Logging in...'),
-          onCancel: closeConnection);
+          onCancel: dialogManager.closeSession);
     }
 
     late Dialog2FaField codeField;

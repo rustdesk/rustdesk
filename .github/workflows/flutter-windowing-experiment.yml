@@ -1,0 +1,132 @@
+name: Flutter windowing experiment
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'examples/flutter_windowing/**'
+      - '.github/patches/install_flutter_windowing.sh'
+      - '.github/workflows/flutter-windowing-experiment.yml'
+  push:
+    branches: [experimental/flutter-official-windowing]
+    paths:
+      - 'examples/flutter_windowing/**'
+      - '.github/patches/install_flutter_windowing.sh'
+      - '.github/workflows/flutter-windowing-experiment.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  unix:
+    name: ${{ matrix.platform }} official windowing
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            runner: ubuntu-26.04
+          - platform: macos
+            runner: macos-15
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    env:
+      FLUTTER_WINDOWING: 'true'
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Install GTK build and test prerequisites
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev ninja-build weston
+      - name: Install Flutter SDK
+        run: bash .github/patches/install_flutter_windowing.sh
+      - name: Build window lifecycle smoke app
+        working-directory: examples/flutter_windowing/experimental_example
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          flutter config --no-enable-swift-package-manager
+          flutter create --platforms="$PLATFORM" --project-name windowing_poc --no-pub .
+          if [[ "$PLATFORM" == macos ]]; then
+            cp tool/HeadlessMainFlutterWindow.swift macos/Runner/MainFlutterWindow.swift
+          fi
+          flutter build "$PLATFORM" --release -t lib/unix_smoke.dart
+      - name: Check native GTK windows under Wayland
+        if: matrix.platform == 'linux'
+        working-directory: examples/flutter_windowing/experimental_example
+        env:
+          LIBGL_ALWAYS_SOFTWARE: 'true'
+          GDK_BACKEND: wayland
+          WAYLAND_DISPLAY: rustdesk-windowing
+        run: |
+          export XDG_RUNTIME_DIR="$(mktemp -d "$RUNNER_TEMP/weston.XXXXXX")"
+          log="$XDG_RUNTIME_DIR/weston.log"
+          weston --backend=headless --renderer=pixman --socket="$WAYLAND_DISPLAY" \
+            --idle-time=0 --log="$log" &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          for attempt in {1..100}; do
+            [[ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]] && break
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 0.1
+          done
+          if [[ ! -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]] ||
+              ! timeout 45s ./build/linux/x64/release/bundle/windowing_poc; then
+            cat "$log"
+            exit 1
+          fi
+      - name: Check native Cocoa windows
+        if: matrix.platform == 'macos'
+        working-directory: examples/flutter_windowing/experimental_example
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import plistlib
+          import subprocess
+
+          bundle, = Path("build/macos/Build/Products/Release").glob("*.app")
+          contents = bundle / "Contents"
+          with (contents / "Info.plist").open("rb") as info:
+              executable = plistlib.load(info)["CFBundleExecutable"]
+          subprocess.run([str(contents / "MacOS" / executable)],
+                         timeout=45, check=True)
+          PY
+
+  windows:
+    name: Windows ${{ matrix.arch }} official windowing
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: windows-2025
+          - arch: arm64
+            runner: windows-11-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    env:
+      FLUTTER_HOST_ARCH: ${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Check out the tested Flutter SDK
+        shell: pwsh
+        run: |
+          $sdk = Join-Path $env:RUNNER_TEMP 'flutter'
+          git -c core.longpaths=true clone --depth 1 --branch 3.50.1 https://github.com/flutter/flutter.git $sdk
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $revision = git -C $sdk rev-parse HEAD
+          if ($LASTEXITCODE -or $revision -ne 'ae9b586f34a8443573f82ef57c3bf914a908cbf7') {
+            throw "Unexpected Flutter revision: $revision"
+          }
+          "WINDOWING_FLUTTER_SDK=$sdk" >> $env:GITHUB_ENV
+      - name: Build and run native window checks
+        shell: pwsh
+        run: |
+          ./examples/flutter_windowing/experimental_example/tool/run.ps1 -FlutterSdk $env:WINDOWING_FLUTTER_SDK -SelfTest
+      - name: Verify mixed legacy and official message routing
+        shell: pwsh
+        working-directory: examples/flutter_windowing
+        env:
+          FLUTTER_WINDOWING: 'false'
+        run: |
+          & (Join-Path $env:WINDOWING_FLUTTER_SDK 'bin/flutter.bat') test test/legacy_backend_test.dart
+          exit $LASTEXITCODE

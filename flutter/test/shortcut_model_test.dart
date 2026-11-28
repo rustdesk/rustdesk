@@ -14,6 +14,7 @@ import 'package:flutter_hbb/models/local_flutter_shortcuts.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/shortcut_model.dart';
+import 'package:flutter_hbb/models/state_model.dart';
 import 'package:uuid/uuid.dart';
 
 class _ChatBinding extends Fake implements RustdeskImpl {
@@ -109,6 +110,9 @@ Future<void> _rawKey(InputModel input,
 }
 
 class _Session extends Fake implements FFI {
+  @override
+  StateGlobal? get windowState => null;
+
   @override
   bool closed = false;
   @override

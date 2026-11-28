@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/desktop/windowing_preview.dart';
 import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/models/input_model.dart';
 
@@ -152,14 +153,16 @@ class RustDeskMultiWindowManager {
     bool withScreenRect,
   ) async {
     final windowController = await DesktopMultiWindow.createWindow(msg);
-    if (isWindows) {
+    final windowId = windowController.windowId;
+    final official = isOfficialSessionWindow(windowId);
+    if (isWindows && !official) {
       windowController.setInitBackgroundColor(Colors.black);
     }
-    final windowId = windowController.windowId;
     if (!withScreenRect) {
+      final sizeOffset = official ? 0.0 : windowId * 20.0;
       windowController
         ..setFrame(const Offset(0, 0) &
-            Size(1280 + windowId * 20, 720 + windowId * 20))
+            Size(1280 + sizeOffset, 720 + sizeOffset))
         ..center()
         ..setTitle(getWindowNameWithId(
           remoteId,
@@ -171,7 +174,23 @@ class RustDeskMultiWindowManager {
         overrideType: type,
       ));
     }
-    if (isMacOS) {
+    if (official) {
+      try {
+        await windowController.setPreventClose(true);
+        if (!withScreenRect) {
+          await restoreWindowPosition(type, windowId: windowId);
+        }
+        await windowController.show();
+      } catch (_) {
+        try {
+          await windowController.setPreventClose(false);
+          await windowController.close();
+        } catch (error) {
+          debugPrint('Could not close a failed official session window: $error');
+        }
+        rethrow;
+      }
+    } else if (isMacOS) {
       Future.microtask(() => windowController.show());
     }
     registerActiveWindow(windowId);
@@ -492,7 +511,8 @@ class RustDeskMultiWindowManager {
       if (shouldSavePos) {
         debugPrint("closing multi window, type: ${type.toString()} id: $wId");
         try {
-          await saveWindowPosition(type, windowId: wId);
+          await saveWindowPosition(type, windowId: wId,
+              flush: isOfficialSessionWindow(wId));
         } catch (e) {
           debugPrint('Failed to save window position of $wId, $e');
         }
@@ -581,11 +601,11 @@ class RustDeskMultiWindowManager {
   // This function is called from one remote window.
   // Only the main window knows `_remoteDesktopWindows` and `_activeWindows`.
   // So we need to call the main window to get the other remote windows' coords.
-  Future<List<RemoteWindowCoords>> getOtherRemoteWindowCoordsFromMain() async {
+  Future<List<RemoteWindowCoords>> getOtherRemoteWindowCoordsFromMain({int? windowId}) async {
     List<RemoteWindowCoords> coords = [];
     // Call the main window to get the coords of other remote windows.
     String res = await DesktopMultiWindow.invokeMethod(
-        kMainWindowId, kWindowEventRemoteWindowCoords, kWindowId.toString());
+        kMainWindowId, kWindowEventRemoteWindowCoords, (windowId ?? kWindowId).toString());
     List<dynamic> list = jsonDecode(res);
     for (var item in list) {
       coords.add(RemoteWindowCoords.fromJson(jsonDecode(item)));

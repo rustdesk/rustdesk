@@ -681,9 +681,9 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
   {
     v.add(TTextMenu(
         child: Obx(() => Text(translate(
-            '${BlockInputState.find(id).value ? 'Unb' : 'B'}lock user input'))),
+            '${BlockInputState.find(ffi.stateKeyFor(id)).value ? 'Unb' : 'B'}lock user input'))),
         onPressed: () {
-          RxBool blockInput = BlockInputState.find(id);
+          RxBool blockInput = BlockInputState.find(ffi.stateKeyFor(id));
           bind.sessionToggleOption(
               sessionId: sessionId,
               value: '${blockInput.value ? 'un' : ''}block-input');
@@ -783,7 +783,7 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
   if (!(isDesktop || isWebDesktop)) {
     v.add(TTextMenu(
       child: Text(translate('Copy Fingerprint')),
-      onPressed: () => onCopyFingerprint(FingerprintState.find(id).value),
+      onPressed: () => onCopyFingerprint(FingerprintState.find(ffi.stateKeyFor(id)).value),
     ));
   }
   // Register tagged TTextMenu callbacks. The else-unregister is defense in
@@ -944,8 +944,8 @@ Future<List<TToggleMenu>> toolbarCursor(
   if (pi.platform != kPeerPlatformAndroid &&
       !ffi.canvasModel.cursorEmbedded &&
       !pi.isWayland) {
-    final state = ShowRemoteCursorState.find(id);
-    final lockState = ShowRemoteCursorLockState.find(id);
+    final state = ShowRemoteCursorState.find(ffi.stateKeyFor(id));
+    final lockState = ShowRemoteCursorLockState.find(ffi.stateKeyFor(id));
     final enabled = !ffiModel.viewOnly;
     final option = 'show-remote-cursor';
     if (pi.currentDisplay == kAllDisplayValue ||
@@ -978,8 +978,8 @@ Future<List<TToggleMenu>> toolbarCursor(
     final value =
         bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
     final showCursorOption = 'show-remote-cursor';
-    final showCursorState = ShowRemoteCursorState.find(id);
-    final showCursorLockState = ShowRemoteCursorLockState.find(id);
+    final showCursorState = ShowRemoteCursorState.find(ffi.stateKeyFor(id));
+    final showCursorLockState = ShowRemoteCursorLockState.find(ffi.stateKeyFor(id));
     final showCursorEnabled = bind.sessionGetToggleOptionSync(
         sessionId: sessionId, arg: showCursorOption);
     showCursorLockState.value = value;
@@ -1035,7 +1035,7 @@ Future<List<TToggleMenu>> toolbarCursor(
       pi.platform != kPeerPlatformAndroid &&
       viewStyle != kRemoteViewStyleOriginal) {
     final option = 'zoom-cursor';
-    final peerState = PeerBoolOption.find(id, option);
+    final peerState = PeerBoolOption.find(ffi.stateKeyFor(id), option);
     v.add(TToggleMenu(
       child: Text(translate('Zoom cursor')),
       value: peerState.value,
@@ -1150,7 +1150,7 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
         child: Text(translate('Lock after session end'))));
   }
 
-  final privacyModeState = PrivacyModeState.find(id);
+  final privacyModeState = PrivacyModeState.find(ffi.stateKeyFor(id));
   if (pi.isSupportMultiDisplay &&
       (privacyModeState.isEmpty ||
           allowDisplaySwitchInPrivacyMode(pi, privacyModeState.value)) &&
@@ -1458,7 +1458,7 @@ void registerToolbarShortcuts(BuildContext context, String id, FFI ffi) {
   unawaited(toolbarViewStyle(context, id, ffi));
   unawaited(toolbarImageQuality(context, id, ffi));
   unawaited(toolbarCodec(context, id, ffi));
-  toolbarPrivacyMode(PrivacyModeState.find(id), context, id, ffi);
+  toolbarPrivacyMode(PrivacyModeState.find(ffi.stateKeyFor(id)), context, id, ffi);
 }
 
 bool showVirtualDisplayMenu(FFI ffi) {
@@ -1480,7 +1480,7 @@ List<Widget> getVirtualDisplayMenuChildren(
     return [];
   }
   final pi = ffi.ffiModel.pi;
-  final privacyModeState = PrivacyModeState.find(id);
+  final privacyModeState = PrivacyModeState.find(ffi.stateKeyFor(id));
   if (pi.isRustDeskIdd) {
     final virtualDisplays = ffi.ffiModel.pi.RustDeskVirtualDisplays;
     final children = <Widget>[];

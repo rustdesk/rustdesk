@@ -9,6 +9,8 @@ import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
+import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
+import 'package:flutter_hbb/desktop/window_scope.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/terminal_copy_shortcut.dart';
@@ -38,7 +40,8 @@ class TerminalTabPage extends StatefulWidget {
 }
 
 class _TerminalTabPageState extends State<TerminalTabPage> {
-  DesktopTabController get tabController => Get.find<DesktopTabController>();
+  final tabController = DesktopTabController(tabType: DesktopTabType.terminal);
+  DesktopWindowScope? _window;
   bool get _canConfigureTerminalClipboardPermission =>
       canConfigureTerminalClipboardPermission(
         settingsDisabled: bind.isDisableSettings(),
@@ -64,10 +67,9 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
       TerminalClipboardNoticeCoordinator<_TerminalClipboardSource>();
 
   _TerminalTabPageState(Map<String, dynamic> params) {
-    Get.put(DesktopTabController(tabType: DesktopTabType.terminal));
     tabController.onSelected = (id) {
       WindowController.fromWindowId(windowId())
-          .setTitle(getWindowNameWithId(id));
+          .setTitle(getWindowNameWithId(id, overrideType: WindowType.Terminal));
     };
     tabController.onRemoved = (_, id) {
       _closeTerminalClipboardNoticeForTab(id);
@@ -500,10 +502,27 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
   @override
   void initState() {
     super.initState();
+    final window = _window = DesktopWindowScope.read(context);
+    if (window?.nativeTitleBar != true) Get.put(tabController);
 
     // Add keyboard shortcut handler
     HardwareKeyboard.instance.addHandler(_handleKeyEvent);
 
+    if (window == null) {
+      _registerHandler();
+    } else {
+      window.run(_registerHandler);
+    }
+    if (window?.nativeTitleBar != true) {
+      Future.delayed(Duration.zero, () {
+        if (mounted) {
+          restoreWindowPosition(WindowType.Terminal, windowId: windowId());
+        }
+      });
+    }
+  }
+
+  void _registerHandler() {
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
       print(
           "[Remote Terminal] call ${call.method} with args ${call.arguments} from window $fromWindowId");
@@ -528,7 +547,12 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
         // Clean up sessions before window destruction (bounded wait)
         await _closeAllTabs();
       } else if (call.method == kWindowActionRebuild) {
-        reloadCurrentWindow();
+        if (!mounted) return null;
+        if (_window?.nativeTitleBar == true) {
+          RefreshWrapper.of(context)?.rebuild();
+        } else {
+          reloadCurrentWindow();
+        }
       } else if (call.method == kWindowEventActiveSession) {
         if (tabController.state.value.tabs.isEmpty) {
           return false;
@@ -545,9 +569,6 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
         }
         return false;
       }
-    });
-    Future.delayed(Duration.zero, () {
-      restoreWindowPosition(WindowType.Terminal, windowId: windowId());
     });
   }
 
@@ -612,6 +633,13 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
   }
 
   bool _handleKeyEvent(KeyEvent event) {
+    if (_window?.nativeTitleBar == true) {
+      final focusedContext = FocusManager.instance.primaryFocus?.context;
+      if (focusedContext == null ||
+          View.maybeOf(focusedContext) != View.of(context)) {
+        return false;
+      }
+    }
     if (event is KeyDownEvent) {
       // Use Cmd+T on macOS, Ctrl+Shift+T on other platforms
       if (event.logicalKey == LogicalKeyboardKey.keyT) {
@@ -750,6 +778,7 @@ class _TerminalTabPageState extends State<TerminalTabPage> {
             return _tabMenuBuilder(peerId, () {});
           },
         ));
+    if (_window?.nativeTitleBar == true) return child;
     final tabWidget = isLinux
         ? buildVirtualWindowFrame(context, child)
         : workaroundWindowBorder(

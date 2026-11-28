@@ -9,6 +9,7 @@ on:
   push:
     branches:
       - master
+      - experimental/flutter-official-windowing
     paths-ignore:
       - ".github/**"
       - "docs/**"
@@ -17,8 +18,13 @@ on:
       - "appimage/**"
       - "flatpak/**"
 
+# Keep the release and upstream PR behavior independent of the preview branch.
+concurrency:
+  group: full-flutter-ci-${{ github.ref == 'refs/heads/experimental/flutter-official-windowing' && github.ref || github.run_id }}
+
 jobs:
   run-ci:
     uses: ./.github/workflows/flutter-build.yml
     with:
       upload-artifact: false
+      desktop-windowing-preview: ${{ github.ref_name == 'experimental/flutter-official-windowing' }}

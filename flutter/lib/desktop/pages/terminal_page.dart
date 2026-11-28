@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/desktop/window_scope.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
@@ -74,6 +75,8 @@ class _TerminalPageState extends State<TerminalPage>
       isSharedPassword: widget.isSharedPassword,
       forceRelay: widget.forceRelay,
       connToken: widget.connToken,
+      windowState: DesktopWindowScope.read(context)?.windowState,
+      onCloseWindow: widget.tabController.onCloseWindow,
     );
 
     // Create terminal model with specific terminal ID
@@ -113,6 +116,7 @@ class _TerminalPageState extends State<TerminalPage>
 
     // Initialize terminal connection
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       widget.tabController.onSelected?.call(widget.id);
 
       // Check if this is a new connection or additional terminal
@@ -123,8 +127,8 @@ class _TerminalPageState extends State<TerminalPage>
 
       if (!isExistingConnection) {
         // First terminal - show loading dialog, wait for onReady
-        _ffi.dialogManager
-            .showLoading(translate('Connecting...'), onCancel: closeConnection);
+        _ffi.dialogManager.showLoading(translate('Connecting...'),
+            onCancel: _ffi.dialogManager.closeSession);
       } else {
         // Additional terminal - connection already established
         // Open the terminal directly

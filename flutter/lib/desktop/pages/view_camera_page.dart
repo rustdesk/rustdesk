@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
+import 'package:flutter_hbb/desktop/window_scope.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/widgets/remote_input.dart';
@@ -33,6 +34,7 @@ class ViewCameraPage extends StatefulWidget {
   ViewCameraPage({
     Key? key,
     required this.id,
+    this.sessionStateKey,
     required this.toolbarState,
     this.sessionId,
     this.tabWindowId,
@@ -45,10 +47,12 @@ class ViewCameraPage extends StatefulWidget {
     this.forceRelay,
     this.isSharedPassword,
   }) : super(key: key) {
-    initSharedStates(id);
+    initSharedStates(stateKey);
   }
 
   final String id;
+  final String? sessionStateKey;
+  String get stateKey => sessionStateKey ?? id;
   final SessionID? sessionId;
   final int? tabWindowId;
   final int? display;
@@ -99,11 +103,31 @@ class _ViewCameraPageState extends State<ViewCameraPage>
 
   void _initStates(String id) {}
 
+  DesktopWindowScope? _window;
+  StateGlobal get _windowState => _window?.windowState ?? stateGlobal;
+
+  void _runInWindow(VoidCallback action) {
+    final window = _window;
+    if (window == null) {
+      action();
+    } else {
+      window.run(action);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
-    _ffi = FFI(widget.sessionId);
-    Get.put<FFI>(_ffi, tag: widget.id);
+    _window = DesktopWindowScope.read(context);
+    _ffi = FFI(widget.sessionId, windowState: _window?.windowState,
+        sessionStateKey: widget.sessionStateKey);
+    final tabController = widget.tabController;
+    if (tabController != null) {
+      _ffi.dialogManager.onCloseSession = () {
+        if (mounted) tabController.closeBy(widget.id);
+      };
+    }
+    if (_window?.nativeTitleBar != true) Get.put<FFI>(_ffi, tag: widget.id);
     _ffi.imageModel.addCallbackOnFirstImage((String peerId) {
       showKBLayoutTypeChooserIfNeeded(
           _ffi.ffiModel.pi.platform, _ffi.dialogManager);
@@ -124,15 +148,16 @@ class _ViewCameraPageState extends State<ViewCameraPage>
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
-      _ffi.dialogManager
-          .showLoading(translate('Connecting...'), onCancel: closeConnection);
+      if (!mounted) return;
+      _ffi.dialogManager.showLoading(translate('Connecting...'),
+          onCancel: _ffi.dialogManager.closeSession);
     });
     WakelockManager.enable(_uniqueKey);
 
     _ffi.ffiModel.updateEventListener(sessionId, widget.id);
     _ffi.qualityMonitorModel.checkShowQualityMonitor(sessionId);
     _ffi.dialogManager.loadMobileActionsOverlayVisible();
-    DesktopMultiWindow.addListener(this);
+    _runInWindow(() => DesktopMultiWindow.addListener(this));
     // if (!_isCustomCursorInited) {
     //   customCursorController.registerNeedUpdateCursorCallback(
     //       (String? lastKey, String? currentKey) async {
@@ -164,7 +189,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
       // and let OS to handle events instead.
       _rawKeyFocusNode.unfocus();
     }
-    stateGlobal.isFocused.value = false;
+    _windowState.isFocused.value = false;
   }
 
   @override
@@ -174,7 +199,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
     if (isWindows) {
       _isWindowBlur = false;
     }
-    stateGlobal.isFocused.value = true;
+    _windowState.isFocused.value = true;
   }
 
   @override
@@ -205,7 +230,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
   void onWindowEnterFullScreen() {
     super.onWindowEnterFullScreen();
     if (isMacOS) {
-      stateGlobal.setFullscreen(true);
+      _windowState.setFullscreen(true);
     }
   }
 
@@ -213,7 +238,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
   void onWindowLeaveFullScreen() {
     super.onWindowLeaveFullScreen();
     if (isMacOS) {
-      stateGlobal.setFullscreen(false);
+      _windowState.setFullscreen(false);
     }
   }
 
@@ -229,7 +254,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
       // ensure we leave this session, this is a double check
       _ffi.inputModel.enterOrLeave(false);
     }
-    DesktopMultiWindow.removeListener(this);
+    _runInWindow(() => DesktopMultiWindow.removeListener(this));
     _ffi.dialogManager.hideMobileActionsOverlay();
     _ffi.imageModel.disposeImage();
     _ffi.cursorModel.disposeImages();
@@ -242,8 +267,10 @@ class _ViewCameraPageState extends State<ViewCameraPage>
           overlays: SystemUiOverlay.values);
     }
     WakelockManager.disable(_uniqueKey);
-    await Get.delete<FFI>(tag: widget.id);
-    removeSharedStates(widget.id);
+    if (_window?.nativeTitleBar != true) {
+      await Get.delete<FFI>(tag: widget.id);
+    }
+    removeSharedStates(widget.stateKey);
   }
 
   Widget emptyOverlay() => BlockableOverlay(
@@ -452,7 +479,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
       }, child: LayoutBuilder(builder: (context, constraints) {
         final c = Provider.of<CanvasModel>(context, listen: false);
         Future.delayed(Duration.zero, () => c.updateViewStyle());
-        final peerDisplay = CurrentDisplayState.find(widget.id);
+        final peerDisplay = CurrentDisplayState.find(widget.stateKey);
         return Obx(
           () => _ffi.ffiModel.pi.isSet.isFalse
               ? Container(color: Colors.transparent)

@@ -11,7 +11,10 @@ import 'package:flutter_hbb/models/input_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/desktop/pages/remote_page.dart';
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
+import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
+import 'package:flutter_hbb/desktop/window_scope.dart';
+import 'package:flutter_hbb/desktop/windowing_preview.dart';
 import 'package:flutter_hbb/desktop/widgets/material_mod_popup_menu.dart'
     as mod_menu;
 import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
@@ -40,8 +43,9 @@ class ConnectionTabPage extends StatefulWidget {
 }
 
 class _ConnectionTabPageState extends State<ConnectionTabPage> {
-  final tabController =
-      Get.put(DesktopTabController(tabType: DesktopTabType.remoteScreen));
+  final tabController = DesktopTabController(tabType: DesktopTabType.remoteScreen);
+  DesktopWindowScope? _window;
+  StateGlobal get _windowState => _window?.windowState ?? stateGlobal;
   final contentKey = UniqueKey();
   static const IconData selectedIcon = Icons.desktop_windows_sharp;
   static const IconData unselectedIcon = Icons.desktop_windows_outlined;
@@ -52,7 +56,12 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
 
   var connectionMap = RxList<Widget>.empty(growable: true);
 
-  _ConnectionTabPageState(Map<String, dynamic> params) {
+  final int _sessionWindowId;
+  String _stateKey(String id) =>
+      isOfficialSessionWindow(_sessionWindowId) ? '$_sessionWindowId:$id' : id;
+
+  _ConnectionTabPageState(Map<String, dynamic> params)
+      : _sessionWindowId = params['windowId'] as int? ?? 0 {
     RemoteCountState.init();
     peerId = params['id'];
     final sessionId = params['session_id'];
@@ -62,9 +71,8 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     final screenRect = parseParamScreenRect(params);
     _isScreenRectSet = screenRect != null;
     _display = display as int?;
-    tryMoveToScreenAndSetFullscreen(screenRect);
     if (peerId != null) {
-      ConnectionTypeState.init(peerId!);
+      ConnectionTypeState.init(_stateKey(peerId!));
       tabController.onSelected = (id) {
         final remotePage = tabController.widget(id);
         if (remotePage is RemotePage) {
@@ -72,8 +80,8 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           bind.setCurSessionId(sessionId: ffi.sessionId);
         }
         WindowController.fromWindowId(params['windowId'])
-            .setTitle(getWindowNameWithId(id));
-        UnreadChatCountState.find(id).value = 0;
+            .setTitle(getWindowNameWithId(id, overrideType: WindowType.RemoteDesktop));
+        UnreadChatCountState.find(_stateKey(id)).value = 0;
       };
       tabController.add(TabInfo(
         key: peerId!,
@@ -92,6 +100,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         page: RemotePage(
           key: ValueKey(peerId),
           id: peerId!,
+          sessionStateKey: _stateKey(peerId!),
           sessionId: sessionId == null ? null : SessionID(sessionId),
           tabWindowId: tabWindowId,
           display: display,
@@ -108,14 +117,25 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       _update_remote_count();
     }
     tabController.onRemoved = (_, id) => onRemoveId(id);
-    rustDeskWinManager.setMethodHandler(_remoteMethodHandler);
   }
 
   @override
   void initState() {
     super.initState();
+    final window = _window = DesktopWindowScope.read(context);
+    if (window?.nativeTitleBar != true) Get.put(tabController);
+    void registerHandler() =>
+        rustDeskWinManager.setMethodHandler(_remoteMethodHandler);
+    if (window == null) {
+      registerHandler();
+    } else {
+      window.run(registerHandler);
+    }
 
-    if (!_isScreenRectSet) {
+    if (_isScreenRectSet) {
+      tryMoveToScreenAndSetFullscreen(parseParamScreenRect(widget.params),
+          windowState: _windowState);
+    } else {
       Future.delayed(Duration.zero, () {
         restoreWindowPosition(
           WindowType.RemoteDesktop,
@@ -139,7 +159,8 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         tail: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _RelativeMouseModeHint(tabController: tabController),
+            _RelativeMouseModeHint(
+                tabController: tabController, windowState: _windowState),
             const AddButton(),
           ],
         ),
@@ -147,7 +168,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         pageViewBuilder: (pageView) => pageView,
         labelGetter: DesktopTab.tablabelGetter,
         tabBuilder: (key, icon, label, themeConf) => Obx(() {
-          final connectionType = ConnectionTypeState.find(key);
+          final connectionType = ConnectionTypeState.find(_stateKey(key));
           if (!connectionType.isValid()) {
             return Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -164,7 +185,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             String msgConn = getConnectionText(
                 secure, direct, connectionType.stream_type.value);
             var msgFingerprint = '${translate('Fingerprint')}:\n';
-            var fingerprint = FingerprintState.find(key).value;
+            var fingerprint = FingerprintState.find(_stateKey(key)).value;
             if (fingerprint.isEmpty) {
               fingerprint = 'N/A';
             }
@@ -189,7 +210,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
                   ).paddingOnly(right: 5),
                 ),
                 label,
-                unreadMessageCountBuilder(UnreadChatCountState.find(key))
+                unreadMessageCountBuilder(UnreadChatCountState.find(_stateKey(key)))
                     .marginOnly(left: 4),
               ],
             );
@@ -217,6 +238,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         }),
       ),
     );
+    if (_window?.nativeTitleBar == true) return child;
     final tabWidget = isLinux
         ? buildVirtualWindowFrame(context, child)
         : workaroundWindowBorder(
@@ -321,7 +343,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           translate('Copy Fingerprint'),
           style: style,
         ),
-        proc: () => onCopyFingerprint(FingerprintState.find(key).value),
+        proc: () => onCopyFingerprint(FingerprintState.find(_stateKey(key)).value),
         padding: padding,
         dismissOnClicked: true,
         dismissCallback: cancelFunc,
@@ -380,9 +402,9 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
 
       loopCloseWindow();
     }
-    ConnectionTypeState.delete(id);
+    ConnectionTypeState.delete(_stateKey(id));
     // Clean up relative mouse mode state for this peer.
-    stateGlobal.relativeMouseModeState.remove(id);
+    _windowState.relativeMouseModeState.remove(id);
     _update_remote_count();
   }
 
@@ -438,17 +460,17 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       final screenRect = parseParamScreenRect(args);
       final prePeerCount = tabController.length;
       Future.delayed(Duration.zero, () async {
-        if (stateGlobal.fullscreen.isTrue) {
+        if (_windowState.fullscreen.isTrue) {
           await WindowController.fromWindowId(windowId()).setFullscreen(false);
-          stateGlobal.setFullscreen(false, procWnd: false);
+          _windowState.setFullscreen(false, procWnd: false);
         }
         await setNewConnectWindowFrame(windowId(), id!, prePeerCount,
-            WindowType.RemoteDesktop, display, screenRect);
+            WindowType.RemoteDesktop, display, screenRect, windowState: _windowState);
         Future.delayed(Duration(milliseconds: isWindows ? 100 : 0), () async {
           await windowOnTop(windowId());
         });
       });
-      ConnectionTypeState.init(id);
+      ConnectionTypeState.init(_stateKey(id));
       tabController.add(TabInfo(
         key: id,
         label: id,
@@ -466,6 +488,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         page: RemotePage(
           key: ValueKey(id),
           id: id,
+          sessionStateKey: _stateKey(id),
           sessionId: sessionId == null ? null : SessionID(sessionId),
           tabWindowId: tabWindowId,
           display: display,
@@ -484,7 +507,12 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     } else if (call.method == "onDestroy") {
       tabController.clear();
     } else if (call.method == kWindowActionRebuild) {
-      reloadCurrentWindow();
+      if (!mounted) return;
+      if (_window?.nativeTitleBar == true) {
+        RefreshWrapper.of(context)?.rebuild();
+      } else {
+        reloadCurrentWindow();
+      }
     } else if (call.method == kWindowEventActiveSession) {
       final jumpOk = tabController.jumpToByKey(call.arguments);
       if (jumpOk) {
@@ -554,7 +582,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         }
       }
     } else if (call.method == kWindowEventSetFullscreen) {
-      stateGlobal.setFullscreen(call.arguments == 'true');
+      _windowState.setFullscreen(call.arguments == 'true');
     }
     _update_remote_count();
     return returnValue;
@@ -565,8 +593,10 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
 /// This helps users remember how to exit relative mouse mode.
 class _RelativeMouseModeHint extends StatelessWidget {
   final DesktopTabController tabController;
+  final StateGlobal windowState;
 
-  const _RelativeMouseModeHint({Key? key, required this.tabController})
+  const _RelativeMouseModeHint(
+      {Key? key, required this.tabController, required this.windowState})
       : super(key: key);
 
   @override
@@ -586,10 +616,8 @@ class _RelativeMouseModeHint extends StatelessWidget {
       final remotePage = selectedTabInfo.page as RemotePage;
       final String peerId = remotePage.id;
 
-      // Use global state to check relative mouse mode (synced from InputModel).
-      // This avoids timing issues with FFI registration.
       final isRelativeMouseMode =
-          stateGlobal.relativeMouseModeState[peerId] ?? false;
+          windowState.relativeMouseModeState[peerId] ?? false;
 
       if (!isRelativeMouseMode) {
         return const SizedBox.shrink();

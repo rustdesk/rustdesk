@@ -1,0 +1,18 @@
+name: windowing_poc
+description: Windows PoC for the opt-in official multi-view backend.
+publish_to: none
+version: 1.0.0+1
+environment:
+  sdk: ^3.14.0
+dependencies:
+  flutter:
+    sdk: flutter
+  desktop_multi_window:
+    path: ../
+  material_ui: ^1.1.0
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+flutter:
+  uses-material-design: true
