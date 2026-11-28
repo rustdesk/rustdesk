@@ -23,10 +23,10 @@ import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../../models/shortcut_model.dart';
 import '../../utils/image.dart';
+import '../utils/mobile_input_session.dart';
+import '../widgets/mobile_text_input.dart';
 import '../widgets/dialog.dart';
 import '../widgets/custom_scale_widget.dart';
-
-final initText = '1' * 1024;
 
 // Workaround for Android (default input method, Microsoft SwiftKey keyboard) when using physical keyboard.
 // When connecting a physical keyboard, `KeyEvent.physicalKey.usbHidUsage` are wrong is using Microsoft SwiftKey keyboard.
@@ -91,7 +91,6 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   Timer? _timer;
   bool _showBar = !isWebDesktop;
   bool _showGestureHelp = false;
-  String _value = '';
   Orientation? _currentOrientation;
   final _uniqueKey = UniqueKey();
   Timer? _iosKeyboardWorkaroundTimer;
@@ -110,8 +109,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   InputModel get inputModel => gFFI.inputModel;
   SessionID get sessionId => gFFI.sessionId;
 
-  final TextEditingController _textController =
-      TextEditingController(text: initText);
+  final _textController = MobileTextInputController();
+  late final MobileInputSession _mobileInput;
+  Worker? _mobileInputConnectionWorker;
 
   _RemotePageState(String id) {
     initSharedStates(id);
@@ -130,6 +130,26 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       isSharedPassword: widget.isSharedPassword,
       forceRelay: widget.forceRelay,
     );
+    _mobileInput = _createMobileInputSession();
+    if (!isWebDesktop) {
+      inputModel.mobileKeyboardDispatcher = (send, {isKeyRelease = false}) {
+        if (!isKeyRelease &&
+            (!_mobileInputAllowed || gFFI.ffiModel.waitForFirstImage.value)) {
+          return Future<void>.value();
+        }
+        if (!isKeyRelease) _textController.resetContext();
+        final pending = _mobileInput.dispatch(send, isKeyRelease: isKeyRelease);
+        unawaited(pending.catchError(_reportMobileInputError));
+        return pending;
+      };
+    }
+    _mobileInputConnectionWorker =
+        ever(gFFI.ffiModel.waitForFirstImage, (bool waiting) {
+      if (waiting) {
+        _mobileInput.invalidate();
+        _textController.resetContext();
+      }
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
       gFFI.dialogManager
@@ -186,6 +206,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   @override
   Future<void> dispose() async {
+    inputModel.mobileKeyboardDispatcher = null;
+    _mobileInput.invalidate();
+    _mobileInputConnectionWorker?.dispose();
     HardwareKeyboard.instance.removeHandler(_handleLocalKeyEvent);
     WidgetsBinding.instance.removeObserver(this);
     // Close the session up-front. `gFFI.close()` below only calls `sessionClose`
@@ -198,6 +221,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     unawaited(bind.sessionClose(sessionId: sessionId));
     // https://github.com/flutter/flutter/issues/64935
     super.dispose();
+    _textController.dispose();
     gFFI.dialogManager.hideMobileActionsOverlay(store: false);
     gFFI.inputModel.listenToMouse(false);
     gFFI.imageModel.disposeImage();
@@ -287,7 +311,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     if (!visible) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
       // [pi.version.isNotEmpty] -> check ready or not, avoid login without soft-keyboard
-      if (gFFI.chatModel.chatWindowOverlayEntry == null &&
+      if (!_showEdit &&
+          gFFI.chatModel.chatWindowOverlayEntry == null &&
           gFFI.ffiModel.pi.version.isNotEmpty) {
         gFFI.invokeMethod("enable_soft_keyboard", false);
       }
@@ -295,7 +320,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       // Workaround for iOS: physical keyboard input fails after virtual keyboard is hidden
       // https://github.com/flutter/flutter/issues/39900
       // https://github.com/rustdesk/rustdesk/discussions/11843#discussioncomment-13499698 - Virtual keyboard issue
-      if (isIOS) {
+      if (isIOS && !_showEdit) {
         _iosKeyboardWorkaroundTimer?.cancel();
         _iosKeyboardWorkaroundTimer = Timer(Duration(milliseconds: 100), () {
           if (!mounted || gFFI.chatModel.inputNode.hasFocus) return;
@@ -313,130 +338,93 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       _timer = Timer(kMobileDelaySoftKeyboardFocus, () {
         SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
             overlays: SystemUiOverlay.values);
-        _mobileFocusNode.requestFocus();
+        if (_showEdit && !gFFI.chatModel.inputNode.hasFocus) {
+          _mobileFocusNode.requestFocus();
+        }
       });
     }
     // update for Scaffold
     setState(() {});
   }
 
-  void _handleIOSSoftKeyboardInput(String newValue) {
-    var oldValue = _value;
-    _value = newValue;
-    var i = newValue.length - 1;
-    for (; i >= 0 && newValue[i] != '1'; --i) {}
-    var j = oldValue.length - 1;
-    for (; j >= 0 && oldValue[j] != '1'; --j) {}
-    if (i < j) j = i;
-    var subNewValue = newValue.substring(j + 1);
-    var subOldValue = oldValue.substring(j + 1);
+  bool get _mobileInputAllowed =>
+      mounted &&
+      !gFFI.closed &&
+      inputModel.keyboardPerm &&
+      !inputModel.isViewOnly &&
+      !inputModel.isViewCamera;
 
-    // get common prefix of subNewValue and subOldValue
-    var common = 0;
-    for (;
-        common < subOldValue.length &&
-            common < subNewValue.length &&
-            subNewValue[common] == subOldValue[common];
-        ++common) {}
-
-    // get newStr from subNewValue
-    var newStr = "";
-    if (subNewValue.length > common) {
-      newStr = subNewValue.substring(common);
-    }
-
-    // Set the value to the old value and early return if is still composing. (1 && 2)
-    // 1. The composing range is valid
-    // 2. The new string is shorter than the composing range.
-    if (_textController.value.isComposingRangeValid) {
-      final composingLength = _textController.value.composing.end -
-          _textController.value.composing.start;
-      if (composingLength > newStr.length) {
-        _value = oldValue;
-        return;
-      }
-    }
-
-    // Delete the different part in the old value.
-    for (i = 0; i < subOldValue.length - common; ++i) {
-      inputModel.inputKey('VK_BACK');
-    }
-
-    // Input the new string.
-    if (newStr.length > 1) {
-      bind.sessionInputString(sessionId: sessionId, value: newStr);
-    } else {
-      inputChar(newStr);
-    }
-  }
-
-  void _handleNonIOSSoftKeyboardInput(String newValue) {
-    var oldValue = _value;
-    _value = newValue;
-    if (oldValue.isNotEmpty &&
-        newValue.isNotEmpty &&
-        oldValue[0] == '1' &&
-        newValue[0] != '1') {
-      // clipboard
-      oldValue = '';
-    }
-    // This length-only diff assumes the IME appends at the end. If an IME
-    // leaves the caret inside paired punctuation, later insertions can replay
-    // the closing symbol: "()" -> "(a)" sends ")" instead of "a". This is a
-    // client text-diff issue, independent of the host keyboard layout.
-    if (newValue.length == oldValue.length) {
-      // ?
-    } else if (newValue.length < oldValue.length) {
-      final char = 'VK_BACK';
-      inputModel.inputKey(char);
-    } else {
-      final content = newValue.substring(oldValue.length);
-      if (content.length > 1) {
-        if (oldValue != '' &&
-            content.length == 2 &&
-            (content == '""' ||
-                content == '()' ||
-                content == '[]' ||
-                content == '<>' ||
-                content == "{}" ||
-                content == '”“' ||
-                content == '《》' ||
-                content == '（）' ||
-                content == '【】')) {
-          // can not only input content[0], because when input ], [ are also auo insert, which cause ] never be input
-          bind.sessionInputString(sessionId: sessionId, value: content);
-          _openKeyboardUnlocked();
-          return;
+  MobileInputSession _createMobileInputSession() {
+    final id = sessionId;
+    return MobileInputSession(
+      canSend: () =>
+          _mobileInputAllowed &&
+          !gFFI.ffiModel.waitForFirstImage.value &&
+          sessionId == id,
+      sendText: (text) {
+        if (!inputModel.keyboardInputAllowed) {
+          throw StateError(translate('Connection not allowed'));
         }
-        bind.sessionInputString(sessionId: sessionId, value: content);
-      } else {
-        inputChar(content);
-      }
-    }
+        return bind.sessionSubmitText(sessionId: id, value: text);
+      },
+    );
   }
 
-  // handle mobile virtual keyboard
-  void handleSoftKeyboardInput(String newValue) {
-    if (!inputModel.keyboardInputAllowed) {
-      return;
+  Future<void> _submitMobileText(String text, bool sendReturn) {
+    if (sendReturn) return _mobileKey('VK_RETURN');
+    if (text.runes.length == 1 &&
+        (inputModel.ctrl || inputModel.alt || inputModel.command)) {
+      _textController.resetContext();
+      return _mobileKey(text);
     }
-    if (isIOS) {
-      _handleIOSSoftKeyboardInput(newValue);
-    } else {
-      _handleNonIOSSoftKeyboardInput(newValue);
-    }
+    return _mobileInput.submit(text);
   }
 
-  void inputChar(String char) {
-    if (!inputModel.keyboardInputAllowed) {
-      return;
-    }
-    if (char == '\n') {
-      char = 'VK_RETURN';
-    } else if (char == ' ') {
-      char = 'VK_SPACE';
-    }
-    inputModel.inputKey(char);
+  Future<void> _mobileKey(String name) {
+    final id = sessionId;
+    final modifiers = (
+      alt: inputModel.alt,
+      ctrl: inputModel.ctrl,
+      shift: inputModel.shift,
+      command: inputModel.command
+    );
+    return _mobileInput.dispatch(() => bind.sessionInputKey(
+        sessionId: id,
+        name: name,
+        down: false,
+        press: true,
+        alt: modifiers.alt,
+        ctrl: modifiers.ctrl,
+        shift: modifiers.shift,
+        command: modifiers.command));
+  }
+
+  void _reportMobileInputError(Object error, StackTrace stack) {
+    debugPrint('Mobile input failed: $error\n$stack');
+    if (mounted) showToast('${translate('Error')}: $error');
+  }
+
+  Widget _buildMobileTextInput() => Consumer<FfiModel>(
+        builder: (_, __, ___) => MobileTextInput(
+          controller: _textController,
+          focusNode: _mobileFocusNode,
+          enabled: _mobileInputAllowed && inputModel.keyboardInputAllowed,
+          commandMode: inputModel.ctrl || inputModel.alt || inputModel.command,
+          onSubmit: _submitMobileText,
+          onRemoteBackspace: () => _mobileKey('VK_BACK'),
+          onRemoteArrow: _mobileKey,
+          onClose: _closeMobileTextInput,
+          onError: _reportMobileInputError,
+          onRemoteKey: _handleMobileCommandKey,
+        ),
+      );
+
+  void _closeMobileTextInput() {
+    _timer?.cancel();
+    setState(() => _showEdit = false);
+    gFFI.invokeMethod("enable_soft_keyboard", false);
+    _mobileFocusNode.unfocus();
+    _physicalFocusNode.requestFocus();
   }
 
   void openKeyboard() {
@@ -464,10 +452,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   void _openKeyboardUnlocked() {
     inputModel.keyboardInputAllowed = true;
     gFFI.invokeMethod("enable_soft_keyboard", true);
-    // destroy first, so that our _value trick can work
-    _value = initText;
-    _textController.text = _value;
-    setState(() => _showEdit = false);
+    _mobileFocusNode.unfocus();
+    setState(() => _showEdit = true);
     _timer?.cancel();
     _timer = Timer(kMobileDelaySoftKeyboard, () {
       // show now, and sleep a while to requestFocus to
@@ -516,13 +502,12 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                   ),
                   backgroundColor: MyTheme.accent,
                   onPressed: () {
+                    if (keyboardIsVisible) {
+                      _closeMobileTextInput();
+                      return;
+                    }
                     setState(() {
-                      if (keyboardIsVisible) {
-                        _showEdit = false;
-                        gFFI.invokeMethod("enable_soft_keyboard", false);
-                        _mobileFocusNode.unfocus();
-                        _physicalFocusNode.requestFocus();
-                      } else if (_showGestureHelp) {
+                      if (_showGestureHelp) {
                         _showGestureHelp = false;
                       } else {
                         _showBar = !_showBar;
@@ -584,22 +569,78 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   }
 
   bool _handleLocalKeyEvent(KeyEvent event) => handleMobileLocalKeyEvent(event,
-      remoteFocused: _physicalFocusNode.hasPrimaryFocus, inputModel: inputModel);
+      remoteFocused: _physicalFocusNode.hasPrimaryFocus ||
+          _mobileFocusNode.hasPrimaryFocus,
+      inputModel: inputModel);
+
+  KeyEventResult _handleMobileCommandKey(KeyEvent event) {
+    if (event is KeyUpEvent) return inputModel.handleKeyEvent(event);
+    final keyboard = HardwareKeyboard.instance;
+    final key = event.logicalKey;
+    final altGr =
+        keyboard.logicalKeysPressed.contains(LogicalKeyboardKey.altRight) ||
+            keyboard.logicalKeysPressed.contains(LogicalKeyboardKey.altGraph);
+    final shortcut = !altGr &&
+        (keyboard.isControlPressed ||
+            keyboard.isMetaPressed ||
+            keyboard.isAltPressed);
+    final command = const [
+          LogicalKeyboardKey.tab,
+          LogicalKeyboardKey.escape,
+          LogicalKeyboardKey.arrowLeft,
+          LogicalKeyboardKey.arrowRight,
+          LogicalKeyboardKey.arrowUp,
+          LogicalKeyboardKey.arrowDown,
+          LogicalKeyboardKey.home,
+          LogicalKeyboardKey.end,
+          LogicalKeyboardKey.pageUp,
+          LogicalKeyboardKey.pageDown,
+          LogicalKeyboardKey.delete,
+          LogicalKeyboardKey.insert,
+          LogicalKeyboardKey.controlLeft,
+          LogicalKeyboardKey.controlRight,
+          LogicalKeyboardKey.shiftLeft,
+          LogicalKeyboardKey.shiftRight,
+          LogicalKeyboardKey.altLeft,
+          LogicalKeyboardKey.altRight,
+          LogicalKeyboardKey.metaLeft,
+          LogicalKeyboardKey.metaRight,
+        ].contains(key) ||
+        (key.keyId >= LogicalKeyboardKey.f1.keyId &&
+            key.keyId <= LogicalKeyboardKey.f12.keyId);
+    if (!shortcut && !command) return KeyEventResult.ignored;
+    return inputModel.handleKeyEvent(event);
+  }
 
   Widget getRawPointerAndKeyBody(Widget child) {
     final ffiModel = Provider.of<FfiModel>(context);
-    return RawPointerMouseRegion(
+    final canvas = RawPointerMouseRegion(
       cursor: ffiModel.keyboard ? SystemMouseCursors.none : MouseCursor.defer,
       inputModel: inputModel,
       // Disable RawKeyFocusScope before the connecting is established.
       // The "Delete" key on the soft keyboard may be grabbed when inputting the password dialog.
-      child: gFFI.ffiModel.pi.isSet.isTrue
-          ? RawKeyFocusScope(
-              focusNode: _physicalFocusNode,
-              inputModel: inputModel,
-              child: child)
-          : child,
+      child: Listener(
+          onPointerDown: (event) {
+            if (gFFI.cursorModel.keyHelpToolsRectToAdjustCanvas
+                    ?.contains(event.position) !=
+                true) {
+              _textController.resetContext();
+            }
+          },
+          child: gFFI.ffiModel.pi.isSet.isTrue
+              ? RawKeyFocusScope(
+                  focusNode: _physicalFocusNode,
+                  inputModel: inputModel,
+                  child: child)
+              : child),
     );
+    return Stack(children: [
+      canvas,
+      ExcludeFocus(
+        excluding: !_showEdit,
+        child: Offstage(offstage: !_showEdit, child: _buildMobileTextInput()),
+      ),
+    ]);
   }
 
   Widget getBottomAppBar() {
@@ -723,38 +764,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
               return KeyHelpTools(
                   keyboardIsVisible: keyboardVisibilityController.isVisible &&
                       (_showEdit || chatKeyboardRequested),
+                  onModifiersChanged: () => setState(() {}),
                   showGestureHelp: _showGestureHelp);
             }),
-            SizedBox(
-              width: 0,
-              height: 0,
-              child: !_showEdit
-                  ? Container()
-                  : TextFormField(
-                      textInputAction: TextInputAction.newline,
-                      autocorrect: false,
-                      // Flutter 3.16.9 Android.
-                      // `enableSuggestions` causes secure keyboard to be shown.
-                      // https://github.com/flutter/flutter/issues/139143
-                      // https://github.com/flutter/flutter/issues/146540
-                      // enableSuggestions: false,
-                      autofocus: true,
-                      focusNode: _mobileFocusNode,
-                      maxLines: null,
-                      controller: _textController,
-                      // trick way to make backspace work always
-                      keyboardType: TextInputType.multiline,
-                      // `onChanged` may be called depending on the input method if this widget is wrapped in
-                      // `Focus(onKeyEvent: ..., child: ...)`
-                      // For `Backspace` button in the soft keyboard:
-                      // en/fr input method:
-                      //      1. The button will not trigger `onKeyEvent` if the text field is not empty.
-                      //      2. The button will trigger `onKeyEvent` if the text field is empty.
-                      // ko/zh/ja input method: the button will trigger `onKeyEvent`
-                      //                     and the event will not popup if `KeyEventResult.handled` is returned.
-                      onChanged: handleSoftKeyboardInput,
-                    ).workaroundFreezeLinuxMint(),
-            ),
           ];
           if (showCursorPaint) {
             paints.add(CursorPaint(widget.id));
@@ -983,12 +995,15 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 class KeyHelpTools extends StatefulWidget {
   final bool keyboardIsVisible;
   final bool showGestureHelp;
+  final VoidCallback? onModifiersChanged;
 
   /// need to show by external request, etc [keyboardIsVisible] or [changeTouchMode]
   bool get requestShow => keyboardIsVisible || showGestureHelp;
 
   KeyHelpTools(
-      {required this.keyboardIsVisible, required this.showGestureHelp});
+      {required this.keyboardIsVisible,
+      required this.showGestureHelp,
+      this.onModifiersChanged});
 
   @override
   State<KeyHelpTools> createState() => _KeyHelpToolsState();
@@ -1004,7 +1019,7 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
   InputModel get inputModel => gFFI.inputModel;
 
   Widget wrap(String text, void Function() onPressed,
-      {bool? active, IconData? icon}) {
+      {bool? active, IconData? icon, bool modifier = false}) {
     return TextButton(
         style: TextButton.styleFrom(
           minimumSize: Size(0, 0),
@@ -1021,7 +1036,12 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
             ? Icon(icon, size: 14, color: Colors.white)
             : Text(translate(text),
                 style: TextStyle(color: Colors.white, fontSize: 11)),
-        onPressed: onPressed);
+        onPressed: modifier
+            ? () {
+                onPressed();
+                widget.onModifiersChanged?.call();
+              }
+            : onPressed);
   }
 
   _updateRect() {
@@ -1060,16 +1080,16 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
     final modifiers = <Widget>[
       wrap('Ctrl ', () {
         setState(() => inputModel.ctrl = !inputModel.ctrl);
-      }, active: inputModel.ctrl),
+      }, active: inputModel.ctrl, modifier: true),
       wrap(' Alt ', () {
         setState(() => inputModel.alt = !inputModel.alt);
-      }, active: inputModel.alt),
+      }, active: inputModel.alt, modifier: true),
       wrap('Shift', () {
         setState(() => inputModel.shift = !inputModel.shift);
       }, active: inputModel.shift),
       wrap(isMac ? ' Cmd ' : ' Win ', () {
         setState(() => inputModel.command = !inputModel.command);
-      }, active: inputModel.command),
+      }, active: inputModel.command, modifier: true),
     ];
     final keys = <Widget>[
       wrap(

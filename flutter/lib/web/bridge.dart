@@ -545,6 +545,10 @@ class RustdeskImpl {
         () => js.context.callMethod('setByName', ['input_string', value]));
   }
 
+  Future<void> sessionSubmitText(
+          {required UuidValue sessionId, required String value, dynamic hint}) =>
+      sessionInputString(sessionId: sessionId, value: value, hint: hint);
+
   Future<void> sessionSendChat(
       {required UuidValue sessionId, required String text, dynamic hint}) {
     return Future(
