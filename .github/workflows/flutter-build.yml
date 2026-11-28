@@ -342,7 +342,7 @@ jobs:
         shell: bash
 
       - name: Save vcpkg binary cache
-        if: ${{ !inputs.upload-artifact && github.ref == 'refs/heads/master' }}
+        if: ${{ !inputs.upload-artifact }}
         uses: ./.github/actions/vcpkg-cache-save
         with:
           name: ${{ matrix.job.target }}
@@ -699,7 +699,7 @@ jobs:
         shell: bash
 
       - name: Save vcpkg binary cache
-        if: ${{ !inputs.upload-artifact && github.ref == 'refs/heads/master' }}
+        if: ${{ !inputs.upload-artifact }}
         uses: ./.github/actions/vcpkg-cache-save
         with:
           name: ${{ matrix.job.target }}
@@ -911,7 +911,7 @@ jobs:
         shell: bash
 
       - name: Save vcpkg binary cache
-        if: ${{ !inputs.upload-artifact && github.ref == 'refs/heads/master' }}
+        if: ${{ !inputs.upload-artifact }}
         uses: ./.github/actions/vcpkg-cache-save
         with:
           name: ${{ matrix.job.target }}
@@ -1162,7 +1162,7 @@ jobs:
           head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-${{ matrix.job.vcpkg-triplet }}-rel-out.log" || true
 
       - name: Save vcpkg binary cache
-        if: ${{ !inputs.upload-artifact && github.ref == 'refs/heads/master' }}
+        if: ${{ !inputs.upload-artifact }}
         uses: ./.github/actions/vcpkg-cache-save
         with:
           name: ${{ matrix.job.target }}
@@ -1667,7 +1667,7 @@ jobs:
         shell: bash
 
       - name: Save vcpkg binary cache
-        if: ${{ !inputs.upload-artifact && github.ref == 'refs/heads/master' }}
+        if: ${{ !inputs.upload-artifact }}
         uses: ./.github/actions/vcpkg-cache-save
         with:
           name: ${{ matrix.job.target }}
@@ -2144,7 +2144,7 @@ jobs:
         shell: bash
 
       - name: Save vcpkg binary cache
-        if: ${{ !inputs.upload-artifact && github.ref == 'refs/heads/master' && (matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true') }}
+        if: ${{ !inputs.upload-artifact && (matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true') }}
         uses: ./.github/actions/vcpkg-cache-save
         with:
           name: ${{ matrix.job.target }}
