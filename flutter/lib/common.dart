@@ -39,6 +39,7 @@ import 'desktop/pages/file_manager_page.dart' as desktop_file_manager;
 import 'desktop/pages/view_camera_page.dart' as desktop_view_camera;
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'models/model.dart';
+import 'models/android_mouse_wheel.dart';
 import 'models/platform_model.dart';
 
 import 'package:flutter_hbb/native/win32.dart'
@@ -1472,16 +1473,44 @@ String readableFileSize(double size) {
 /// This will happen in Android AccessibilityService Input
 /// android can't init dispatching size yet ,see: https://stackoverflow.com/questions/59960451/android-accessibility-dispatchgesture-is-it-possible-to-specify-pressure-for-a
 /// use this temporary solution until flutter or android fixes the bug
-class AccessibilityListener extends StatelessWidget {
+class AccessibilityListener extends StatefulWidget {
   final Widget? child;
   static final offset = 100;
 
   AccessibilityListener({this.child});
 
   @override
+  State<AccessibilityListener> createState() => _AccessibilityListenerState();
+}
+
+class _AccessibilityListenerState extends State<AccessibilityListener> {
+  final _mouseWheel = AndroidMouseWheel();
+
+  bool _handleMouseWheel(PointerEvent event) {
+    final ticks = _mouseWheel.handle(event,
+        logicalPixelsPerNotch: AndroidMouseWheel.physicalPixelsPerNotch /
+            View.of(context).devicePixelRatio);
+    if (ticks == null) return false;
+    for (var i = 0; i < ticks.abs(); i++) {
+      GestureBinding.instance.handlePointerEvent(PointerScrollEvent(
+          timeStamp: event.timeStamp,
+          kind: PointerDeviceKind.mouse,
+          device: event.device,
+          position: _mouseWheel.scrollPosition,
+          scrollDelta:
+              Offset(0, -AndroidMouseWheel.scrollDistance * ticks.sign)));
+    }
+    return true;
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final offset = AccessibilityListener.offset;
     return Listener(
+        onPointerHover: _handleMouseWheel,
+        onPointerCancel: _handleMouseWheel,
         onPointerDown: (evt) {
+          if (_handleMouseWheel(evt)) return;
           if (evt.size == 1) {
             GestureBinding.instance.handlePointerEvent(PointerAddedEvent(
                 pointer: evt.pointer + offset, position: evt.position));
@@ -1492,6 +1521,7 @@ class AccessibilityListener extends StatelessWidget {
           }
         },
         onPointerUp: (evt) {
+          if (_handleMouseWheel(evt)) return;
           if (evt.size == 1) {
             GestureBinding.instance.handlePointerEvent(PointerUpEvent(
                 pointer: evt.pointer + offset,
@@ -1502,6 +1532,7 @@ class AccessibilityListener extends StatelessWidget {
           }
         },
         onPointerMove: (evt) {
+          if (_handleMouseWheel(evt)) return;
           if (evt.size == 1) {
             GestureBinding.instance.handlePointerEvent(PointerMoveEvent(
                 pointer: evt.pointer + offset,
@@ -1510,7 +1541,7 @@ class AccessibilityListener extends StatelessWidget {
                 position: evt.position));
           }
         },
-        child: child);
+        child: widget.child);
   }
 }
 
