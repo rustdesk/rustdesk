@@ -2684,6 +2684,12 @@ impl VideoHandler {
         }
     }
 
+    #[cfg(all(target_os = "macos", feature = "hwcodec", feature = "flutter"))]
+    fn configure_cv_pixel_buffer_output(&mut self) {
+        self.decoder
+            .set_output_cv_pixel_buffer(crate::flutter::cv_pixel_buffer_render_enabled());
+    }
+
     /// Handle a new video frame.
     #[inline]
     pub fn handle_frame(
@@ -2749,6 +2755,8 @@ impl VideoHandler {
         let luid = Self::get_adapter_luid();
         let format = format.unwrap_or(self.decoder.format());
         self.decoder = Decoder::new(format, luid);
+        #[cfg(all(target_os = "macos", feature = "hwcodec", feature = "flutter"))]
+        self.configure_cv_pixel_buffer_output();
         self.fail_counter = 0;
         self.first_frame = true;
     }
@@ -4044,6 +4052,8 @@ pub fn start_video_thread<F, T>(
                         let format = CodecFormat::from(&vf);
                         if video_handler.is_none() {
                             let mut handler = VideoHandler::new(format, display);
+                            #[cfg(all(target_os = "macos", feature = "hwcodec", feature = "flutter"))]
+                            handler.configure_cv_pixel_buffer_output();
                             let record_state = session.lc.read().unwrap().record_state;
                             let record_permission = session.lc.read().unwrap().record_permission;
                             let id = session.lc.read().unwrap().id.clone();

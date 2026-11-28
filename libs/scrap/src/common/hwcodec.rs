@@ -373,6 +373,11 @@ impl HwRamDecoder {
             Err(e) => Err(anyhow!(e)),
         }
     }
+
+    #[cfg(target_os = "macos")]
+    pub fn set_output_cv_pixel_buffer(&mut self, enable: bool) {
+        self.decoder.set_output_cv_pixel_buffer(enable);
+    }
 }
 
 pub struct HwRamDecoderImage<'a> {
@@ -380,9 +385,29 @@ pub struct HwRamDecoderImage<'a> {
 }
 
 impl HwRamDecoderImage<'_> {
+    // Valid until the next `HwRamDecoder::decode`.
+    #[cfg(target_os = "macos")]
+    pub fn cv_pixel_buffer(&self) -> Option<*mut std::ffi::c_void> {
+        self.frame.cv_pixel_buffer.as_ref().map(|b| b.as_ptr())
+    }
+
+    #[cfg(target_os = "macos")]
+    pub fn width(&self) -> usize {
+        self.frame.width as _
+    }
+
+    #[cfg(target_os = "macos")]
+    pub fn height(&self) -> usize {
+        self.frame.height as _
+    }
+
     // rgb [in/out] fmt and stride must be set in ImageRgb
     pub fn to_fmt(&self, rgb: &mut ImageRgb, i420: &mut Vec<u8>) -> ResultType<()> {
         let frame = self.frame;
+        #[cfg(target_os = "macos")]
+        if frame.cv_pixel_buffer.is_some() {
+            bail!("frame is a CVPixelBuffer, not in system memory");
+        }
         let width = frame.width;
         let height = frame.height;
         rgb.w = width as _;
