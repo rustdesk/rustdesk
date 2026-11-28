@@ -2278,6 +2278,9 @@ class CanvasModel with ChangeNotifier {
   // after showing the soft keyboard.
   bool isMobileCanvasChanged = false;
 
+  // mobile only
+  double _mobileBottomBarHeight = 0;
+
   final ScrollController _horizontal = ScrollController();
   final ScrollController _vertical = ScrollController();
 
@@ -2351,6 +2354,8 @@ class CanvasModel with ChangeNotifier {
           mediaData.viewInsets.bottom -
           (parent.target?.cursorModel.keyHelpToolsRectToAdjustCanvas?.bottom ??
               0);
+      // Scaffold reserves max(keyboard, bottom toolbar) below the body.
+      h -= max(_mobileBottomBarHeight - mediaData.viewInsets.bottom, 0.0);
       // Orientation-specific handling:
       //  - Portrait: additionally subtract top padding (e.g. status bar / notch)
       //  - Landscape: does not subtract mediaData.padding.top/bottom (home indicator auto-hides)
@@ -2381,6 +2386,13 @@ class CanvasModel with ChangeNotifier {
   }
 
   updateSize() => _size = getSize();
+
+  // mobile only
+  void setMobileBottomBarHeight(double height) {
+    if (!isMobile || _mobileBottomBarHeight == height) return;
+    _mobileBottomBarHeight = height;
+    updateViewStyle();
+  }
 
   updateViewStyle({refreshMousePos = true, notify = true}) async {
     final style = await bind.sessionGetViewStyle(sessionId: sessionId);
@@ -2773,6 +2785,7 @@ class CanvasModel with ChangeNotifier {
     _scale = 1.0;
     _locked = false;
     _lastViewStyle = ViewStyle.defaultViewStyle();
+    _mobileBottomBarHeight = 0;
     _timerMobileFocusCanvasCursor?.cancel();
     _timerMobileRestoreCanvasOffset?.cancel();
     _offsetBeforeMobileSoftKeyboard = null;
