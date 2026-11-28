@@ -1632,6 +1632,15 @@ class InputModel {
     }
   }
 
+  void _syncCursorBeforeScrollIfNeeded(PointerEvent e) {
+    if ((!isDesktop && !isWebDesktop) || _relativeMouse.enabled.value) return;
+    if (!_pointerMovedAfterEnter) {
+      final canvasPosition = _pointerPositionForRemoteCanvas(e);
+      handleMouse(getMouseEventMove(), canvasPosition,
+          edgeScroll: useEdgeScroll);
+    }
+  }
+
   void onPointerPanZoomStart(PointerPanZoomStartEvent e) {
     _lastScale = 1.0;
     _stopFling = true;
@@ -1639,7 +1648,9 @@ class InputModel {
     if (isViewCamera) return;
     if (peerPlatform == kPeerPlatformAndroid) {
       handlePointerEvent('touch', kMouseEventTypePanStart, e.position);
+      return;
     }
+    _syncCursorBeforeScrollIfNeeded(e);
   }
 
   // https://docs.flutter.dev/release/breaking-changes/trackpad-gestures
@@ -1976,6 +1987,7 @@ class InputModel {
     if (isViewOnly) return;
     if (isViewCamera) return;
     if (e is PointerScrollEvent) {
+      _syncCursorBeforeScrollIfNeeded(e);
       final rawDx = e.scrollDelta.dx;
       final rawDy = e.scrollDelta.dy;
       final dominantDelta = rawDx.abs() > rawDy.abs() ? rawDx.abs() : rawDy.abs();
@@ -2162,7 +2174,6 @@ class InputModel {
         type = kMouseEventTypeUp;
         break;
       case _kMouseEventMove:
-        _pointerMovedAfterEnter = true;
         isMove = true;
         break;
       default:
@@ -2190,6 +2201,7 @@ class InputModel {
     if (pos == null) {
       return null;
     }
+    if (isMove) _pointerMovedAfterEnter = true;
     if (isMatchingMouseUp) {
       _pressedMouseButtons &= ~buttons;
     }
