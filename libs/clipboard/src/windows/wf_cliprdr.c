@@ -34,6 +34,8 @@
 #include <tchar.h>
 
 #include <strsafe.h>
+#include <stdio.h>
+#include <stdarg.h>
 
 #include <windef.h>
 
@@ -2177,6 +2179,30 @@ static UINT cliprdr_send_response_filecontents(
  * accepting virtual files) receives a normal drop and copies the files.
  **********************************************************************************/
 
+/* Drag and drop diagnostics: %TEMP%\rustdesk-dragdrop.log */
+static void wf_dd_log(const char *fmt, ...)
+{
+	char path[MAX_PATH];
+	DWORD n = GetTempPathA(MAX_PATH, path);
+	FILE *f = NULL;
+	SYSTEMTIME st;
+	va_list args;
+	if (n == 0 || n > MAX_PATH - 32)
+		return;
+	if (FAILED(StringCchCatA(path, MAX_PATH, "rustdesk-dragdrop.log")))
+		return;
+	if (fopen_s(&f, path, "a") != 0 || !f)
+		return;
+	GetLocalTime(&st);
+	fprintf(f, "%02u:%02u:%02u.%03u [pid %lu] ", st.wHour, st.wMinute, st.wSecond,
+	        st.wMilliseconds, GetCurrentProcessId());
+	va_start(args, fmt);
+	vfprintf(f, fmt, args);
+	va_end(args);
+	fputc('\n', f);
+	fclose(f);
+}
+
 typedef struct
 {
 	IDropSource iDropSource;
@@ -2312,7 +2338,7 @@ static void wf_do_drag_drop(wfClipboard *clipboard)
 
 	if (!data_obj)
 	{
-		DEBUG_CLIPRDR("drag and drop: no file data object");
+		wf_dd_log("drag and drop: no file data object");
 		return;
 	}
 
@@ -2323,9 +2349,16 @@ static void wf_do_drag_drop(wfClipboard *clipboard)
 		return;
 	}
 
+	{
+		POINT pt = {0, 0};
+		HWND under = NULL;
+		GetCursorPos(&pt);
+		under = WindowFromPoint(pt);
+		wf_dd_log("DoDragDrop start at (%ld, %ld), window under cursor %p", pt.x, pt.y, under);
+	}
 	hr = DoDragDrop(data_obj, drop_source, DROPEFFECT_COPY, &effect);
-	DEBUG_CLIPRDR("drag and drop: DoDragDrop returned 0x%x, effect %u", hr, effect);
-	(void)hr;
+	wf_dd_log("DoDragDrop returned 0x%08lx, effect %lu, QueryContinueDrag calls %u", hr, effect,
+	          ((CliprdrDropSource *)drop_source)->calls);
 
 	IDropSource_Release(drop_source);
 	IDataObject_Release(data_obj);
@@ -2472,11 +2505,14 @@ static LRESULT CALLBACK cliprdr_proc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM 
 				HRESULT res = OleSetClipboard(clipboard->data_obj);
 				if (res != S_OK)
 				{
+					if (clipboard->drag_drop_pending)
+						wf_dd_log("OleSetClipboard failed 0x%08lx", res);
 					wf_destroy_file_obj(clipboard->data_obj);
 					clipboard->data_obj = NULL;
 				}
 				else if (InterlockedExchange(&clipboard->drag_drop_pending, 0))
 				{
+					wf_dd_log("clipboard file object set, starting drag and drop");
 					/* Run the drag after the mutex is released, from a fresh message. */
 					PostMessage(clipboard->hwnd, WM_CLIPRDR_MESSAGE, OLE_DODRAGDROP, 0);
 				}
@@ -3307,6 +3343,8 @@ static UINT wf_cliprdr_server_format_list(CliprdrClientContext *context,
 			        sizeof(RUSTDESK_DRAG_DROP_FORMAT_NAME)) == 0)
 		{
 			InterlockedExchange(&clipboard->drag_drop_pending, 1);
+			wf_dd_log("format list with drag and drop marker received, %u formats",
+			          formatList->numFormats);
 		}
 	}
 
@@ -3378,6 +3416,9 @@ static UINT wf_cliprdr_server_format_list(CliprdrClientContext *context,
 	}
 	ReleaseSRWLockExclusive(&clipboard->format_map_lock);
 
+	if (clipboard->drag_drop_pending)
+		wf_dd_log("drag and drop: file formats %s, files enabled %d",
+		          file_transferring(clipboard) ? "present" : "missing", (int)context->EnableFiles);
 	if (file_transferring(clipboard))
 	{
 		if (context->EnableFiles)

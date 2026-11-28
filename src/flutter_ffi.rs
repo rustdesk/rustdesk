@@ -608,13 +608,22 @@ pub fn session_drop_files(session_id: SessionID, paths: Vec<String>) -> SyncRetu
     #[cfg(feature = "unix-file-copy-paste")]
     {
         use crate::client::Interface as _;
+        log::info!("drag and drop files: dropped {} item(s) onto the remote view", paths.len());
         if paths.is_empty() {
             return SyncReturn(false);
         }
-        if let Some(s) = sessions::get_session_by_session_id(&session_id) {
+        let Some(s) = sessions::get_session_by_session_id(&session_id) else {
+            log::warn!("drag and drop files: session not found");
+            return SyncReturn(false);
+        };
+        {
             let version = s.lc.read().unwrap().version;
             if !crate::is_support_file_copy_paste_num(version) || !s.is_file_clipboard_required() {
-                log::warn!("drag and drop files: file copy paste is not available");
+                log::warn!(
+                    "drag and drop files: file copy paste is not available (peer version {}, required {})",
+                    version,
+                    s.is_file_clipboard_required()
+                );
                 return SyncReturn(false);
             }
             match clipboard::platform::unix::serv_files::sync_files(&paths) {
@@ -629,6 +638,7 @@ pub fn session_drop_files(session_id: SessionID, paths: Vec<String>) -> SyncRetu
                             crate::clipboard_file::DRAG_DROP_FORMAT_NAME.to_owned(),
                         ));
                     }
+                    log::info!("drag and drop files: offering {:?} to the peer", format_list);
                     s.send(crate::client::Data::Message(
                         crate::clipboard_file::clip_2_msg(format_list),
                     ));
