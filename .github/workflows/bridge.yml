@@ -4,6 +4,11 @@ name: Build flutter-rust-bridge
 
 on:
   workflow_call:
+    inputs:
+      # false for builds that publish: see the note above `jobs:` in flutter-build.yml.
+      use-cache:
+        type: boolean
+        default: true
 
 env:
   CARGO_EXPAND_VERSION: "1.0.95"
@@ -66,11 +71,13 @@ jobs:
           components: "rustfmt"
 
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        if: ${{ inputs.use-cache }}
         with:
           prefix-key: bridge-${{ matrix.job.os }}
 
       - name: Cache Bridge
         id: cache-bridge
+        if: ${{ inputs.use-cache }}
         uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3
         with:
           path: /tmp/flutter_rust_bridge
@@ -81,7 +88,7 @@ jobs:
         with:
           channel: "stable"
           flutter-version: ${{ matrix.job.flutter-version }}
-          cache: true
+          cache: ${{ inputs.use-cache }}
 
       - name: Install flutter rust bridge deps
         shell: bash
