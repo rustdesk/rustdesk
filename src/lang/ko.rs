@@ -830,5 +830,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "RustDesk 서비스를 통해 그래픽 카드에서 직접 화면을 캡처하므로 로그인 화면을 포함해 Wayland 화면 공유 확인이 표시되지 않습니다. 모든 장치에서 작동하지 않을 수 있습니다. 연결 시 여전히 화면 공유를 요청하면 이 옵션을 끄거나 X11을 사용하세요. 이 설정을 변경하면 현재 세션의 연결이 끊어집니다."),
         ("wayland-drm-tip", "Wayland에서 무인 접근을 하려면 DRM 화면 캡처를 사용해 보고, 작동하지 않으면 X11을 사용하세요."),
         ("login-wayland-drm-tip", "Wayland 로그인 화면에 접근하려면 DRM 화면 캡처를 사용해 보거나 X11로 전환하세요."),
+        ("Keyboard mode", "키보드 모드"),
     ].iter().cloned().collect();
 }

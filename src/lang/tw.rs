@@ -830,5 +830,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "透過 RustDesk 服務直接從顯示卡擷取螢幕，不會再跳出 Wayland 的螢幕分享確認，登入畫面也能使用。並非所有裝置都支援；如果連線時仍要求確認螢幕分享，請關閉此選項或改用 X11。變更此選項會中斷目前的工作階段。"),
         ("wayland-drm-tip", "如需在 Wayland 上無人值守存取，請嘗試 DRM 擷取螢幕；若無法運作，請使用 X11。"),
         ("login-wayland-drm-tip", "如需存取 Wayland 登入畫面，請嘗試 DRM 擷取螢幕，或將其切換到 X11。"),
+        ("Keyboard mode", "鍵盤模式"),
     ].iter().cloned().collect();
 }

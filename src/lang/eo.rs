@@ -830,5 +830,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "Kaptas la ekranon rekte de la grafika karto per la servo de RustDesk, sen la peto de Wayland pri ekrankundivido, ankaŭ ĉe la ensaluta ekrano. Eble ne funkcias sur ĉiu aparato; se konektoj ankoraŭ petas kundividi la ekranon, malŝaltu ĉi tion aŭ uzu X11. Ŝanĝo malkonektas la nunajn seancojn."),
         ("wayland-drm-tip", "Por senĉeesta aliro ĉe Wayland, provu DRM-ekrankapton, aŭ uzu X11 se ĝi ne funkcias."),
         ("login-wayland-drm-tip", "Por aliri la ensalutan ekranon de Wayland, provu DRM-ekrankapton aŭ ŝanĝu ĝin al X11."),
+        ("Keyboard mode", "Klavara reĝimo"),
     ].iter().cloned().collect();
 }

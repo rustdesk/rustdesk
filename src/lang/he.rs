@@ -830,5 +830,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "לוכד את המסך ישירות מכרטיס המסך דרך שירות RustDesk, ללא בקשת שיתוף המסך של Wayland, גם במסך ההתחברות. ייתכן שלא יעבוד בכל מכשיר; אם חיבורים עדיין מבקשים לשתף את המסך, כבה אפשרות זו או השתמש ב-X11. שינוי ההגדרה מנתק את ההפעלות הנוכחיות."),
         ("wayland-drm-tip", "לגישה ללא ליווי ב-Wayland, נסה לכידת מסך באמצעות DRM, או השתמש ב-X11 אם זה לא עובד."),
         ("login-wayland-drm-tip", "לגישה למסך ההתחברות של Wayland, נסה לכידת מסך באמצעות DRM או העבר אותו ל-X11."),
+        ("Keyboard mode", "מצב מקלדת"),
     ].iter().cloned().collect();
 }

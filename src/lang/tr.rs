@@ -830,5 +830,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "Ekranı RustDesk hizmeti aracılığıyla doğrudan ekran kartından yakalar; giriş ekranı dahil Wayland ekran paylaşımı onayı istenmez. Her cihazda çalışmayabilir; bağlantılar hâlâ ekran paylaşımı istiyorsa bunu kapatın veya X11 kullanın. Bunu değiştirmek mevcut oturumların bağlantısını keser."),
         ("wayland-drm-tip", "Wayland'de gözetimsiz erişim için DRM ekran yakalamayı deneyin, çalışmazsa X11 kullanın."),
         ("login-wayland-drm-tip", "Wayland giriş ekranına erişmek için DRM ekran yakalamayı deneyin veya ekranı X11'e geçirin."),
+        ("Keyboard mode", "Klavye modu"),
     ].iter().cloned().collect();
 }

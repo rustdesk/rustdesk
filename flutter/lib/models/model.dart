@@ -1504,6 +1504,14 @@ class FfiModel with ChangeNotifier {
 
   checkDesktopKeyboardMode() async {
     if (isInputSourceFlutter) {
+      if (isWeb && !pi.isWayland) {
+        final mode = await bind.sessionGetKeyboardMode(sessionId: sessionId);
+        if (mode != null &&
+            bind.sessionIsKeyboardModeSupported(
+                sessionId: sessionId, mode: mode)) {
+          return;
+        }
+      }
       // Local side, flutter keyboard input source
       // Currently only map mode is supported, legacy mode is used for compatibility.
       for (final mode in [kKeyMapMode, kKeyLegacyMode]) {

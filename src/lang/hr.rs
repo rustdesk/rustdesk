@@ -830,5 +830,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("drm-capture-tip", "Snima zaslon izravno s grafičke kartice putem usluge RustDesk, bez Waylandova upita za dijeljenje zaslona, uključujući zaslon za prijavu. Možda neće raditi na svakom uređaju; ako veze i dalje traže dijeljenje zaslona, isključite ovo ili koristite X11. Promjena prekida trenutne sesije."),
         ("wayland-drm-tip", "Za pristup bez nadzora na Waylandu isprobajte DRM snimanje zaslona ili koristite X11 ako ne radi."),
         ("login-wayland-drm-tip", "Za pristup Waylandovu zaslonu za prijavu isprobajte DRM snimanje zaslona ili ga prebacite na X11."),
+        ("Keyboard mode", "Način rada tipkovnice"),
     ].iter().cloned().collect();
 }
